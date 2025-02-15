@@ -1,0 +1,11 @@
+.env
+.windsurfrules
+__pycache__/
+.pyc
+.qodo
+.cursor
+config/
+data/
+static/
+uploads/
+tests/
