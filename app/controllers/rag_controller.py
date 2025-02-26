@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 # Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-pro')
+model = genai.GenerativeModel('gemini-2.0-flash')
 
 # Create a blueprint with a more descriptive name
 rag_bp = Blueprint('document_processing', __name__)
@@ -361,30 +361,44 @@ def extract_topics():
             }), 400
 
         # Validate file type
-        if not file.filename.endswith('.json'):
+        if not file.filename.endswith('.pdf'):
             logger.warning(f"Invalid file type: {file.filename}")
             return jsonify({
                 'status': 'error',
-                'message': 'Invalid file type. Only JSON files are allowed.',
+                'message': 'Invalid file type. Only PDF files are allowed.',
                 'error_code': 'INVALID_FILE_TYPE'
             }), 400
 
-        # Read the JSON content
-        with open("your_file.pdf", "rb") as file:
-            pdf_document = fitz.open(file)  # Open PDF file
-            pdf_content = "\n".join([page.get_text() for page in pdf_document])  # Extract text
+        # Read the PDF content
+        pdf_document = fitz.open(file)  # Open PDF file
+        pdf_content = "\n".join([page.get_text() for page in pdf_document])  # Extract text
 
         
         
         # Create prompt for Gemini
-        prompt = """RETURN ALL THE TOPICS COVERED IN COURSE.JSON
-        ALSO RETURN THEM IN A CHAPTER-WISE FORMAT
-        WITH SUBTOPICS IN A NUMBERED SEQUENCE.THE SEQUENCE IS LIKE CH 1 
-        THEN ALL THE SUBTOPICS IN CH 1 THAN CH 2 AND SO ON GIVE ME LIEK THAT
-        PLEASE GIVE ME A NESTED JSON FOR CH AND SUBTOPICS
-        THE PDF CAN ALSO TABLE,SIMPLE TEXT AND ALL THOSE THINGS HELP ME GET THE TOPICS!
-        THE FORMAT SHOULD BE CH 1 WITH NAME :{ITS SUBTOPIC},CH2 WITH NAME:{ITS SUBTOPICS}
-        """ + pdf_content 
+        prompt = """Extract only the course content (topics and subtopics) from the given syllabus PDF. Ignore any extra details such as unit hours,Contact Hours, examination schemes, objectives, and references.  
+                Format the extracted content in a structured JSON format as follows:  
+                - Each chapter should be labeled as **"Chapter X: Chapter Name"**.  
+                - Each chapter should contain a list of subtopics in a numbered sequence, such as **"X.Y: Subtopic Name"**.  
+                - Maintain the hierarchical structure of topics and subtopics.  
+                - The output should be clean and formatted as nested JSON.
+
+                Example format:  
+                ```json
+                {
+                "Chapters": {
+                    "Chapter 1: Introduction": {
+                    "1.1": "Subtopic Name",
+                    "1.2": "Subtopic Name"
+                    },
+                    "Chapter 2: Next Chapter Name": {
+                    "2.1": "Subtopic Name"
+                    }
+                }
+                } NOTE: ONLY RETURN THE JSON NO OTHER TEXT IS NEEDED AND NOT WANTED 
+                I REPEAT THAT WE NOT NO SUCH THINGS AS HERE'S THE BACKDOWN   """ + pdf_content 
+                
+
         # Get response from Gemini
         response = model.generate_content(prompt)
         
