@@ -46,7 +46,7 @@ def create_app(config_name=None):
     
     # Configure upload folder
     app.config['UPLOAD_FOLDER'] = str(upload_dir)
-    app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 16MB max file size
     
     # Register blueprints with error handling
     try:
