@@ -32,6 +32,16 @@ def allowed_file(filename: str) -> bool:
     allowed_extensions = {'pdf'}
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
+def clean_gemini_json_response(response_text: str) -> str:
+    """
+    Clean Gemini API JSON response by removing markdown code block markers
+    @param response_text: Raw response text from Gemini
+    @returns: Cleaned JSON string
+    """
+    # Remove ```json and ``` markers
+    cleaned_text = response_text.replace('```json', '').replace('```', '').strip()
+    return cleaned_text
+
 @rag_bp.route('/upload_and_process', methods=['POST'])
 def upload_and_process_pdf():
     """
@@ -373,10 +383,8 @@ def extract_topics():
         pdf_document = fitz.open(file)  # Open PDF file
         pdf_content = "\n".join([page.get_text() for page in pdf_document])  # Extract text
 
-        
-        
-        # Create prompt for Gemini
-        prompt = """Extract only the course content (topics and subtopics) from the given syllabus PDF. Ignore any extra details such as unit hours,Contact Hours, examination schemes, objectives, and references.  
+        # Extract course content (topics and subtopics)
+        content_prompt = """Extract only the course content (topics and subtopics) from the given syllabus PDF. Ignore any extra details such as unit hours,Contact Hours, examination schemes, objectives, and references.  
                 Format the extracted content in a structured JSON format as follows:  
                 - Each chapter should be labeled as **"Chapter X: Chapter Name"**.  
                 - Each chapter should contain a list of subtopics in a numbered sequence, such as **"X.Y: Subtopic Name"**.  
@@ -396,16 +404,54 @@ def extract_topics():
                     }
                 }
                 } NOTE: ONLY RETURN THE JSON NO OTHER TEXT IS NEEDED AND NOT WANTED 
-                I REPEAT THAT WE NOT NO SUCH THINGS AS HERE'S THE BACKDOWN   """ + pdf_content 
-                
+                I REPEAT THAT WE NOT NO SUCH THINGS AS HERE'S THE BACKDOWN   """
 
-        # Get response from Gemini
-        response = model.generate_content(prompt)
+        content_parts = [content_prompt, pdf_content]
+        content_response = model.generate_content(content_parts)
+        course_content = json.loads(content_response.text)
+
+        # Extract keywords and skills
+        keyword_prompt = """Analyze this course syllabus and extract:
+        1. Key technical terms and concepts that will be covered
+        2. Main skills students will learn
+        3. Core technologies or tools that will be taught
+
+        Format the response as a JSON with the following structure:
+        {
+            "technical_terms": ["term1", "term2", ...],
+            "skills": ["skill1", "skill2", ...],
+            "technologies": ["tech1", "tech2", ...]
+        }
+        NOTE: ONLY RETURN THE JSON NO OTHER TEXT IS NEEDED"""
+
+        keyword_parts = [keyword_prompt, pdf_content]
+        keyword_response = model.generate_content(keyword_parts)
+        keywords = json.loads(keyword_response.text)
+
+        # Generate welcome message
+        welcome_prompt = f"""Create an engaging and professional welcome message for a course with the following details:
+        Course Content: {json.dumps(course_content)}
+        Key Learning Outcomes: {json.dumps(keywords)}
+
+        The message should:
+        1. Be warm and encouraging
+        2. Highlight the value and relevance of the course
+        3. Mention 2-3 key skills or technologies they'll learn
+        4. Keep it concise (max 4-5 sentences)
         
-        logger.info("Prompt sent to Gemini successfully")
+        NOTE: Return only the welcome message, no additional text."""
+
+        welcome_response = model.generate_content(welcome_prompt)
+        welcome_message = welcome_response.text
+
+        # Close the PDF document
+        pdf_document.close()
+
         return jsonify({
             'status': 'success',
-            'data': response.text
+            'course_content': course_content,
+            'keywords': keywords,
+            'welcome_message': welcome_message
         }), 200
 
     except Exception as e:
@@ -420,50 +466,164 @@ def extract_topics():
 @rag_bp.route('/send_pdf_to_gemini', methods=['POST'])
 def send_pdf_to_gemini():
     """
-    Send PDF content to Gemini AI for processing
-    @returns: Dict containing the response from Gemini or error message
-    @description: Processes a PDF file to send to Gemini AI for analysis
+    Send PDF content directly to Gemini API for analysis
+    @returns: JSON response with course content, keywords, and welcome message
+    @description: Processes PDF content through Gemini API without additional processing
     """
     try:
         if 'file' not in request.files:
-            return jsonify({'status': 'error', 'message': 'No file uploaded', 'error_code': 'MISSING_FILE'}), 400
+            error_msg = "No file provided in request"
+            logger.warning(error_msg)
+            return jsonify({
+                'status': 'error',
+                'message': error_msg,
+                'error_code': 'NO_FILE'
+            }), 400
 
         file = request.files['file']
-        if file.filename == '':
-            return jsonify({'status': 'error', 'message': 'No file selected', 'error_code': 'EMPTY_FILENAME'}), 400
+        if not file or file.filename == '':
+            error_msg = "No file selected"
+            logger.warning(error_msg)
+            return jsonify({
+                'status': 'error',
+                'message': error_msg,
+                'error_code': 'NO_FILE_SELECTED'
+            }), 400
 
-        if not file.filename.endswith('.pdf'):
-            return jsonify({'status': 'error', 'message': 'Invalid file type. Only PDFs are allowed.', 'error_code': 'INVALID_FILE_TYPE'}), 400
-
-        # Read and extract text from PDF using PyMuPDF
-        pdf_data = file.read()
-        pdf_document = fitz.open(stream=pdf_data, filetype="pdf")
-        pdf_text = ""
-        for page in pdf_document:
-            pdf_text += page.get_text()
-        pdf_document.close()
-
-        # Create prompt for Gemini
-        prompt = """
-RETURN ALL THE TOPICS COVERED IN COURSE.JSON
-ALSO RETURN THEM IN A CHAPTER-WISE FORMAT
-WITH SUBTOPICS IN A NUMBERED SEQUENCE.
-"""
-        content_parts = [prompt, pdf_text]
-
-        # Get response from Gemini
-        response = model.generate_content(content_parts)
+        # Read PDF content directly from request
         
-        logger.info("PDF sent to Gemini successfully")
+        pdf_document = fitz.open(stream=file.read(), filetype="pdf")
+        pdf_text = "\n".join([page.get_text() for page in pdf_document])
+        pdf_document.close()
+        if pdf_document == None:
+            error_msg = "Unable to open PDF document"
+            logger.error(error_msg)
+            return jsonify({
+                'status': 'error',
+                'message': error_msg,
+                'error_code': 'PDF_DOCUMENT_OPEN_FAILED',
+         
+            }), 400
+
+        # Validate PDF text extraction
+        if not pdf_text or len(pdf_text.strip()) < 10:
+            error_msg = "Unable to extract text from PDF. The document might be empty or unreadable."
+            logger.error(error_msg)
+            return jsonify({
+                'status': 'error',
+                'message': error_msg,
+                'error_code': 'PDF_TEXT_EXTRACTION_FAILED'
+            }), 400
+
+        # Extract course content (topics and subtopics)
+        content_prompt = """Extract only the course content (topics and subtopics) from the given syllabus PDF. Ignore any extra details such as unit hours,Contact Hours, examination schemes, objectives, and references.  
+                Format the extracted content in a structured JSON format as follows:  
+                - Each chapter should be labeled as **"Chapter X: Chapter Name"**.  
+                - Each chapter should contain a list of subtopics in a numbered sequence, such as **"X.Y: Subtopic Name"**.  
+                - Maintain the hierarchical structure of topics and subtopics.  
+                - The output should be clean and formatted as nested JSON.
+
+                Example format:  
+                ```json
+                {
+                "Chapters": {
+                    "Chapter 1: Introduction": {
+                    "1.1": "Subtopic Name",
+                    "1.2": "Subtopic Name"
+                    },
+                    "Chapter 2: Next Chapter Name": {
+                    "2.1": "Subtopic Name"
+                    }
+                }
+                } NOTE: ONLY RETURN THE JSON NO OTHER TEXT IS NEEDED AND NOT WANTED 
+                I REPEAT THAT WE NOT NO SUCH THINGS AS HERE'S THE BACKDOWN   """
+
+        content_parts = [content_prompt, pdf_text]
+        content_response = model.generate_content(content_parts)
+        
+        # Validate course content response
+        try:
+            # Clean the JSON response
+            cleaned_content_text = clean_gemini_json_response(content_response.text)
+            course_content = json.loads(cleaned_content_text)
+            logger.info("Course content extracted successfully")
+            logger.info(json.dumps(course_content, indent=4))
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse course content JSON. Raw response: {content_response.text}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to parse course content from Gemini response',
+                'raw_response': content_response.text,
+                'error_code': 'COURSE_CONTENT_PARSING_FAILED',
+                
+            }), 500
+
+        # Extract keywords and skills
+        keyword_prompt = """Analyze this course syllabus and extract:
+        1. Key technical terms and concepts that will be covered
+        2. Main skills students will learn
+        3. Core technologies or tools that will be taught
+
+        Format the response as a JSON with the following structure:
+        {
+            "technical_terms": ["term1", "term2", ...],
+            "skills": ["skill1", "skill2", ...],
+            "technologies": ["tech1", "tech2", ...]
+        }
+        NOTE: ONLY RETURN THE JSON NO OTHER TEXT IS NEEDED"""
+
+        keyword_parts = [keyword_prompt, pdf_text]
+        keyword_response = model.generate_content(keyword_parts)
+        
+        # Validate keywords response
+        try:
+            # Clean the JSON response
+            cleaned_keyword_text = clean_gemini_json_response(keyword_response.text)
+            keywords = json.loads(cleaned_keyword_text)
+        except json.JSONDecodeError:
+            logger.error(f"Failed to parse keywords JSON. Raw response: {keyword_response.text}")
+            return jsonify({
+                'status': 'error',
+                'message': 'Failed to parse keywords from Gemini response',
+                'raw_response': keyword_response.text,
+                'error_code': 'KEYWORDS_PARSING_FAILED'
+            }), 500
+
+        # Generate welcome message
+        welcome_prompt = f"""Create an engaging and professional welcome message for a course with the following details:
+        Course Content: {json.dumps(course_content)}
+        Key Learning Outcomes: {json.dumps(keywords)}
+
+        The message should:
+        1. Be warm and encouraging
+        2. Highlight the value and relevance of the course
+        3. Mention 2-3 key skills or technologies they'll learn
+        4. Keep it concise (max 4-5 sentences)
+        
+        NOTE: Return only the welcome message, no additional text."""
+
+        welcome_response = model.generate_content(welcome_prompt)
+        welcome_message = welcome_response.text.strip()
+
+        # Validate welcome message
+        if not welcome_message:
+            welcome_message = "Welcome to the course! We're excited to help you learn and grow."
+
         return jsonify({
             'status': 'success',
-            'data': response.text
+            'course_content': course_content,
+            'keywords': keywords,
+            'welcome_message': welcome_message
         }), 200
 
     except Exception as e:
-        logger.error(f"Error processing request: {e}")
-        return jsonify({'status': 'error', 'message': str(e), 'error_code': 'PROCESSING_FAILED'}), 500
-
+        error_msg = f"Error processing PDF: {str(e)}"
+        logger.error(error_msg, exc_info=True)
+        return jsonify({
+            'status': 'error',
+            'message': error_msg,
+            'error_code': 'PARSING_FAILED'
+        }), 500
 
 @rag_bp.route('/parse_document', methods=['POST'])
 def parse_document():
