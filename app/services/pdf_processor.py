@@ -175,30 +175,31 @@ class PDFParser:
         """
         text_elements = []
         try:
-            for page_num in range(len(self.doc)):
-                if (page_num + 1) % 10 == 0:
-                    logger.info(f"Processing text from page {page_num + 1}/{len(self.doc)}")
+            elements = partition_pdf(
+                filename=str(self.pdf_path)
+            )
 
-                elements = partition_pdf(
-                    filename=str(self.pdf_path),
-                    start_page=page_num + 1,
-                    end_page=page_num + 1
-                )
-
-                structured = []
-                for el in elements:
-                    entry = {
-                        'type': el.category,
-                        'text': el.text,
-                        'metadata': {
-                            'page_number': el.metadata.page_number if hasattr(el.metadata, 'page_number') else None,
-                            'coordinates': el.metadata.coordinates.to_dict() if hasattr(el.metadata, 'coordinates') else None
-                        }
+            structured = []
+            for el in elements:
+                entry = {
+                    'type': el.category,
+                    'text': el.text,
+                    'metadata': {
+                        'page_number': el.metadata.page_number if hasattr(el.metadata, 'page_number') else None,
+                        'coordinates': el.metadata.coordinates.to_dict() if hasattr(el.metadata, 'coordinates') else None
                     }
-                    structured.append(entry)
+                }
+                structured.append(entry)
 
-                text_elements.extend(structured)
-
+            text_elements.extend(structured)
+            
+            # Save text elements to JSON
+            if text_elements:
+                json_path = self.text_dir / f"{self.book_name}_text_elements.json"
+                with open(json_path, 'w', encoding='utf-8') as f:
+                    json.dump(text_elements, f, ensure_ascii=False, indent=2)
+                logger.info(f"Text elements saved to {json_path}")
+            
             return text_elements
 
         except Exception as e:
