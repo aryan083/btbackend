@@ -563,6 +563,9 @@ def send_pdf_to_gemini():
         1. Key technical terms and concepts that will be covered
         2. Main skills students will learn
         3. Core technologies or tools that will be taught
+        4. The technical terms should be concise
+        5. Technical terms array should not exceed size of 10
+        6. Technical terms should be covering the course content completely
 
         Format the response as a JSON with the following structure:
         {
