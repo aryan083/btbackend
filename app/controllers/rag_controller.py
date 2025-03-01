@@ -590,7 +590,7 @@ def send_pdf_to_gemini():
                 'message': 'Failed to parse keywords from Gemini response',
                 'raw_response': keyword_response.text,
                 'error_code': 'KEYWORDS_PARSING_FAILED'
-            }), 500
+            }), 500 
 
         # Generate welcome message
         welcome_prompt = f"""Create an engaging and professional welcome message for a course with the following details:
@@ -601,7 +601,7 @@ def send_pdf_to_gemini():
         1. Be warm and encouraging
         2. Highlight the value and relevance of the course
         3. Mention 2-3 key skills or technologies they'll learn
-        4. Keep it concise (max 4-5 sentences)
+        4. Keep it concise (max 2 sentences)
         
         NOTE: Return only the welcome message, no additional text."""
 
