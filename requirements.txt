@@ -8,3 +8,4 @@ PyMuPDF==1.23.8
 python-dotenv==1.0.0
 python-json-logger==2.0.7
 unstructured==0.7.5
+google.generativeai==0.3.2
