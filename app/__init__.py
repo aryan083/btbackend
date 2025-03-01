@@ -53,6 +53,10 @@ def create_app(config_name=None):
         from .controllers.rag_controller import rag_bp
         app.register_blueprint(rag_bp, url_prefix='/api')
         
+        from app.controllers.course_controller import course_bp
+        app.register_blueprint(course_bp)
+        logging.info("Successfully registered course blueprint")
+        
         # Add a simple health check route
         @app.route('/health', methods=['GET'])
         def health_check():
