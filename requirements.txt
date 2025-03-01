@@ -14,6 +14,7 @@ pydantic==2.5.2
 typing-extensions==4.9.0
 colorlog
 pillow
+pdf2image
 # # Testing Dependencies
 # pytest
 # pytest-cov==4.0.0
