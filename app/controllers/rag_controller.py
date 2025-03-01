@@ -611,13 +611,38 @@ def send_pdf_to_gemini():
         # Validate welcome message
         if not welcome_message:
             welcome_message = "Welcome to the course! We're excited to help you learn and grow."
+        
+        # Generate course title
+        title_prompt = f"""Create an engaging and professional course title based on the following course content and key learning outcomes:
+        Course Content: {json.dumps(course_content)}
+        Key Learning Outcomes: {json.dumps(keywords)}
+
+        The title should:
+        1. Be informative and engaging
+        2. Highlight the value and relevance of the course
+        3. Be brief max 30 letters
+        
+        NOTE: Return only the course title, no additional text."""
+
+        title_response = model.generate_content(title_prompt)
+        course_title = title_response.text.strip()
+        print(course_title)
+        
+        
+
+        # Validate course title
+        if not course_title:
+            course_title = "Course title."
 
         return jsonify({
             'status': 'success',
             'course_content': course_content,
             'keywords': keywords,
-            'welcome_message': welcome_message
+            'welcome_message': welcome_message,
+            'course_title': course_title
+            
         }), 200
+
 
     except Exception as e:
         error_msg = f"Error processing PDF: {str(e)}"
