@@ -34,6 +34,7 @@ class DocumentService:
         @returns: bool - True if response is valid, False otherwise
         @description: Checks if the response contains all required fields and has valid status
         """
+    
         if not isinstance(response, dict):
             logger.error("Response is not a dictionary")
             return False
@@ -42,17 +43,23 @@ class DocumentService:
             logger.error(f"Response status is not success: {response.get('status')}")
             return False
             
-        metadata = response.get('metadata')
-        if not isinstance(metadata, dict):
-            logger.error("Metadata is not a dictionary")
+        # Validate common metadata
+        required_metadata = ['title', 'page_count']
+        if not all(key in response.get('metadata', {}) for key in required_metadata):
+            logger.error("Missing required metadata fields")
             return False
             
-        required_fields = ['title', 'author', 'page_count']
-        missing_fields = [field for field in required_fields if field not in metadata]
-        if missing_fields:
-            logger.error(f"Missing required metadata fields: {missing_fields}")
-            return False
-            
+        # Validate chunk data when using course JSON
+        if response.get('course_json', False):
+            if not isinstance(response.get('chunks', []), list):
+                logger.error("Invalid chunks format")
+                return False
+        else:
+            # Validate chapter structure for default processing
+            if not isinstance(response.get('chapters', []), list):
+                logger.error("Invalid chapters format")
+                return False
+                
         return True
 
     def process_book(self, book_path: str, extract_images: bool = True, 
@@ -117,6 +124,49 @@ class DocumentService:
                 'error_details': str(e)
             }
 
+    def process_with_course_json(self, pdf_path: str, course_json: Dict) -> Dict[str, Any]:
+        """
+        Process PDF with provided course JSON structure
+        @param pdf_path: str - Path to the PDF file
+        @param course_json: Dict - Course structure JSON
+        @returns: Dict[str, Any] - Processing results with JSON-guided chunking
+        @description: Processes PDF using provided course structure for chunking
+        @raises: ValueError if pdf_path is invalid
+                RuntimeError if processing fails
+        """
+        try:
+            if not os.path.isfile(pdf_path):
+                error_msg = f"Invalid PDF path: {pdf_path}"
+                logger.error(error_msg)
+                return {
+                    'status': 'error',
+                    'message': error_msg
+                }
+
+            processor = PDFParser(pdf_path, self.upload_dir)
+            try:
+                processor.course_json = course_json
+                return processor.process_document()
+            except Exception as e:
+                error_msg = f"PDF processing error: {str(e)}"
+                logger.error(error_msg)
+                return {
+                    'status': 'error',
+                    'message': error_msg,
+                    'error_details': str(e)
+                }
+            finally:
+                processor.close()
+
+        except Exception as e:
+            error_msg = f"Processing with course JSON failed: {str(e)}"
+            logger.error(error_msg)
+            return {
+                'status': 'error',
+                'message': error_msg,
+                'error_details': str(e)
+            }
+
     def process_syllabus(self, syllabus_path: str) -> Dict[str, Any]:
         """
         Process a syllabus PDF to extract course structure
@@ -170,3 +220,41 @@ class DocumentService:
                 'message': error_msg,
                 'error_details': str(e)
             }
+
+        """
+        Process PDF with provided course JSON structure
+        @param pdf_path: str - Path to the PDF file
+        @param course_json: Dict - Course structure JSON
+        @returns: Dict[str, Any] - Processing results with JSON-guided chunking
+        @description: Processes PDF using provided course structure for chunking
+        @raises: ValueError if pdf_path is invalid
+                RuntimeError if processing fails
+        """
+    def process_with_json(self, pdf_path: str, course_json: Dict) -> Dict[str, Any]:
+        """Process PDF with provided course JSON"""
+        try:
+            processor = PDFParser(pdf_path, self.upload_dir)
+            processor.load_course_json(course_json)
+            result = processor.process_document()
+            return {
+                "status": "success",
+                "chunks": result.get("chunks", []),
+                "images": result.get("images", []),
+                "metadata": result.get("metadata", {})
+            }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+        """
+        Save course JSON to document directory
+        @param document_dir: str - Directory path for the document
+        @param course_json: Dict - Course structure JSON
+        @returns: str - Path to the saved JSON file
+        @description: Saves course JSON to the specified document directory
+        """
+    def save_course_json(self, document_dir: str, course_json: Dict):
+        """Save course JSON to document directory"""
+        json_path = Path(document_dir) / "course_structure.json"
+        with open(json_path, 'w') as f:
+            json.dump(course_json, f, indent=2)
+        return str(json_path)

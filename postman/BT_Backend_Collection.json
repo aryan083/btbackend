@@ -1,259 +1,694 @@
 {
-	"info": {
-		"_postman_id": "bf9a3e15-4c21-4b8e-9f8d-1234567890ab",
-		"name": "BT Backend API",
-		"description": "Collection for BT Backend API endpoints",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Document Processing",
-			"item": [
-				{
-					"name": "Extract Topics from Course.json",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "file",
-									"type": "file",
-									"src": "",
-									"description": "Course.json file to process"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/extract_topics",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"extract_topics"
-							]
-						},
-						"description": "Extract topics and subtopics from Course.json using Gemini AI"
-					},
-					"response": [
-						{
-							"name": "Success Response",
-							"originalRequest": {
-								"method": "POST",
-								"header": [],
-								"body": {
-									"mode": "formdata",
-									"formdata": [
-										{
-											"key": "file",
-											"type": "file",
-											"src": ""
-										}
-									]
-								},
-								"url": {
-									"raw": "{{base_url}}/api/extract_topics",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"api",
-										"extract_topics"
-									]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": {
-								"status": "success",
-								"data": {
-									"topics": [
-										{
-											"name": "Example Topic",
-											"subtopics": [
-												"Subtopic 1",
-												"Subtopic 2"
-											]
-										}
-									]
-								}
-							}
-						},
-						{
-							"name": "Error Response - Invalid File",
-							"originalRequest": {
-								"method": "POST",
-								"header": [],
-								"body": {
-									"mode": "formdata",
-									"formdata": [
-										{
-											"key": "file",
-											"type": "file",
-											"src": ""
-										}
-									]
-								},
-								"url": {
-									"raw": "{{base_url}}/api/extract_topics",
-									"host": [
-										"{{base_url}}"
-									],
-									"path": [
-										"api",
-										"extract_topics"
-									]
-								}
-							},
-							"status": "Bad Request",
-							"code": 400,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json"
-								}
-							],
-							"cookie": [],
-							"body": {
-								"status": "error",
-								"message": "Invalid file type. Only JSON files are allowed.",
-								"error_code": "INVALID_FILE_TYPE"
-							}
-						}
-					]
-				},
-				{
-					"name": "Upload and Process PDF",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "file",
-									"type": "file",
-									"src": "",
-									"description": "PDF file to process"
-								},
-								{
-									"key": "document_type",
-									"value": "book",
-									"type": "text",
-									"description": "Type of document (book or syllabus)"
-								},
-								{
-									"key": "document_name",
-									"value": "",
-									"type": "text",
-									"description": "Optional name for the document"
-								},
-								{
-									"key": "extract_images",
-									"value": "true",
-									"type": "text",
-									"description": "Whether to extract images"
-								},
-								{
-									"key": "extract_text",
-									"value": "true",
-									"type": "text",
-									"description": "Whether to extract text"
-								},
-								{
-									"key": "save_json",
-									"value": "true",
-									"type": "text",
-									"description": "Whether to save as JSON"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/upload_and_process",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"upload_and_process"
-							]
-						},
-						"description": "Upload and process a PDF file"
-					},
-					"response": []
-				},
-				{
-					"name": "Process Book",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "file",
-									"type": "file",
-									"src": "",
-									"description": "PDF file to process"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/process_book",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"process_book"
-							]
-						},
-						"description": "Process a book PDF file"
-					},
-					"response": []
-				},
-				{
-					"name": "Process Syllabus",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"body": {
-							"mode": "formdata",
-							"formdata": [
-								{
-									"key": "file",
-									"type": "file",
-									"src": "",
-									"description": "PDF file to process"
-								}
-							]
-						},
-						"url": {
-							"raw": "{{base_url}}/api/process_syllabus",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"process_syllabus"
-							]
-						},
-						"description": "Process a syllabus PDF file"
-					},
-					"response": []
-				},
-				{
+  "info": {
+    "_postman_id": "bf9a3e15-4c21-4b8e-9f8d-1234567890ab",
+    "name": "BT Backend API",
+    "description": "Collection for BT Backend API endpoints",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Document Processing",
+      "item": [
+        {
+          "name": "Start Processing",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to process"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/start_processing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "start_processing"]
+            },
+            "description": "Initiate processing of a PDF file and get a process ID"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "process_id": "123e4567-e89b-12d3-a456-426614174000",
+                "temp_dir": "/path/to/temp/processing/dir"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Finalize Processing",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"process_id\": \"123e4567-e89b-12d3-a456-426614174000\",\n  \"course_json\": {\n    \"course_content\": {\n      \"Chapter 1\": {\n        \"1.1\": \"Introduction\"\n      }\n    }\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/finalize_processing",
+              "host": ["{{base_url}}"],
+              "path": ["api", "finalize_processing"]
+            },
+            "description": "Complete processing with course JSON structure"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "output_dir": "/path/to/final/output/dir",
+                "chunks": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "Process Course JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"/path/to/course.json\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_course_json",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_course_json"]
+            },
+            "description": "Process a Course.json file with Gemini AI"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "course_content": {},
+                "technical_terms": [],
+                "skills": [],
+                "technologies": [],
+                "welcome_message": "",
+                "course_title": "",
+                "saved_path": "/path/to/course_structure.json"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Send PDF to Gemini",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to process"
+                },
+                {
+                  "key": "document_name",
+                  "type": "text",
+                  "value": "",
+                  "description": "Optional document name"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/send_pdf_to_gemini",
+              "host": ["{{base_url}}"],
+              "path": ["api", "send_pdf_to_gemini"]
+            },
+            "description": "Process PDF with Gemini AI to extract course structure and metadata"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "course_content": {},
+                "technical_terms": [],
+                "skills": [],
+                "technologies": [],
+                "welcome_message": "",
+                "course_title": "",
+                "saved_path": "/path/to/course_structure.json"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to upload"
+                },
+                {
+                  "key": "book_name",
+                  "type": "text",
+                  "value": "",
+                  "description": "Optional book name"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "upload"]
+            },
+            "description": "Upload a PDF file to the server"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "message": "File uploaded successfully",
+                "file_path": "/path/to/uploaded/file.pdf",
+                "book_name": "example_book"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Process PDF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"/path/to/file.pdf\",\n  \"extract_images\": true,\n  \"extract_text\": true,\n  \"save_json\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process"]
+            },
+            "description": "Process an uploaded PDF file"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "message": "PDF processed successfully",
+                "output_dir": "/path/to/output/directory"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Serve File",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/uploads/example.pdf",
+              "host": ["{{base_url}}"],
+              "path": ["api", "uploads", "example.pdf"]
+            },
+            "description": "Retrieve a processed file from the server"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "binary",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/pdf"
+                }
+              ],
+              "cookie": []
+            }
+          ]
+        },
+        {
+          "name": "Upload and Process PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { 
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to process"
+                },
+                {
+                  "key": "document_type",
+                  "value": "book",
+                  "type": "text",
+                  "description": "Type of document (book or syllabus)"
+                },
+                {
+                  "key": "document_name",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional name for the document"
+                },
+                {
+                  "key": "extract_images",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Whether to extract images"
+                },
+                {
+                  "key": "extract_text",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Whether to extract text"
+                },
+                {
+                  "key": "save_json",
+                  "value": "true",
+                  "type": "text",
+                  "description": "Whether to save as JSON"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/upload_and_process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "upload_and_process"]
+            },
+            "description": "Upload and process a PDF file with options for document type and processing parameters"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "POST",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": ""
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "file_path": "/path/to/uploaded/file.pdf",
+                "document_name": "example_doc",
+                "document_type": "book"
+              }
+            },
+            {
+              "name": "Error Response - Invalid File",
+              "originalRequest": {
+                "method": "POST",
+                "body": {
+                  "mode": "formdata",
+                  "formdata": [
+                    {
+                      "key": "file",
+                      "type": "file",
+                      "src": ""
+                    }
+                  ]
+                }
+              },
+              "status": "Bad Request",
+              "code": 400,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "error",
+                "message": "Invalid file type. Only PDF files are allowed.",
+                "error_code": "INVALID_FILE_TYPE"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Process Book",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to process"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_book",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_book"]
+            },
+            "description": "Process a book PDF file with default processing options"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "file_path": "/path/to/uploaded/book.pdf",
+                "document_name": "example_book",
+                "document_type": "book"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Process Syllabus",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to process"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_syllabus",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_syllabus"]
+            },
+            "description": "Process a syllabus PDF file with specialized syllabus processing"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "file_path": "/path/to/uploaded/syllabus.pdf",
+                "document_name": "example_syllabus",
+                "document_type": "syllabus"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Upload PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF file to upload"
+                },
+                {
+                  "key": "book_name",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional name for the book"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "upload"]
+            },
+            "description": "Upload a PDF file without processing"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "message": "File uploaded successfully",
+                "file_path": "/path/to/uploaded/file.pdf",
+                "book_name": "example_book"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Serve File",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/uploads/example_book/file.pdf",
+              "host": ["{{base_url}}"],
+              "path": ["api", "uploads", "example_book", "file.pdf"]
+            },
+            "description": "Serve a file from the uploads directory"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "binary",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/pdf"
+                }
+              ],
+              "cookie": []
+            }
+          ]
+        },
+        {
+          "name": "Process PDF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"/path/to/uploaded/file.pdf\",\n  \"extract_images\": true,\n  \"extract_text\": true,\n  \"save_json\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process"]
+            },
+            "description": "Process a previously uploaded PDF file with configurable options"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "message": "PDF processed successfully",
+                "output_dir": "/path/to/output/directory"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Process Course JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"file_path\": \"/path/to/course_structure.json\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_course_json",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_course_json"]
+            },
+            "description": "Process a Course.json file with Gemini AI"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": {
+                "status": "success",
+                "message": "Course.json processed successfully"
+              }
+            }
+          ]
+        },
+        {
 					"name": "Send PDF to Gemini",
 					"request": {
 						"method": "POST",
@@ -263,9 +698,9 @@
 							"formdata": [
 								{
 									"key": "file",
+									"description": "PDF file to process",
 									"type": "file",
-									"src": "",
-									"description": "PDF file to process"
+									"src": "/D:/Semester_6/HCD/Booktube Backend Final/btbackend/Testitems/Syllabus/Computer Networks_01CT0503.pdf"
 								}
 							]
 						},
@@ -311,8 +746,7 @@
 		{
 			"key": "base_url",
 			"value": "http://localhost:5000",
-			"type": "string",
-			"description": "Base URL for the API"
+			"type": "string"
 		}
 	]
 }
