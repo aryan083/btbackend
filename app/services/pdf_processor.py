@@ -198,12 +198,6 @@ class PDFParser:
                             
                         except IOError as e:
                             logger.error(f"Failed to save image {image_filename}: {str(e)}")
-                            # Clean up any partially written file
-                            if image_path.exists():
-                                try:
-                                    image_path.unlink()
-                                except Exception as cleanup_error:
-                                    logger.warning(f"Failed to clean up partial image file: {str(cleanup_error)}")
                             # Clean up partially written file
                             if image_path.exists():
                                 image_path.unlink()
@@ -349,13 +343,6 @@ class PDFParser:
             logger.error(f"Failed to save JSON files: {str(e)}")
             raise
 
-    def _save_course_json(self, course_json: Dict):
-        """Save course JSON to output directory"""
-        json_path = self.output_dir / "course_structure.json"
-        with open(json_path, 'w') as f:
-            json.dump(course_json, f, indent=2)
-        return json_path
-
     def _create_chapter_map(self):
         """Map JSON chapters to PDF structure"""
         try:
@@ -371,170 +358,7 @@ class PDFParser:
             logger.error(f"Chapter mapping failed: {str(e)}")
             raise
 
-    def _load_course_json(self):
-        """Load course JSON from output directory"""
-        try:
-            json_path = self.output_dir / "course_structure.json"
-            if json_path.exists():
-                with open(json_path, 'r') as f:
-                    self.course_json = json.load(f)
-                self._map_chapters_to_toc()
-            else:
-                logger.warning(f"Course JSON not found at {json_path}")
-                self.course_json = None
-        except Exception as e:
-            logger.error(f"Failed to load course JSON: {str(e)}")
-            self.course_json = None
-
-    def load_course_json(self, course_data: Dict):
-        """Load course JSON structure for chunking"""
-        self.course_json = course_data
-        self._map_chapters_to_toc()
-        
-        
-    def _map_chapters_to_toc(self):
-        """Map course JSON chapters to PDF table of contents"""
-        try:
-            if not self.course_json:
-                return
-            
-            if not self.doc:
-                logger.warning("Cannot map chapters to TOC: PDF document not initialized")
-                return
-                
-            # Clear existing TOC
-            self.doc.set_toc([])
-            
-            # Add new entries from course JSON
-            new_toc = []
-            for chapter in self.course_json.get('chapters', []):
-                if 'title' not in chapter or 'start_page' not in chapter:
-                    logger.warning(f"Skipping invalid chapter entry: {chapter}")
-                    continue
-                    
-                new_toc.append([1, chapter['title'], chapter['start_page'] - 1])  # Convert 1-based to 0-based page index
-                
-            self.doc.set_toc(new_toc)
-            logger.info(f"Updated TOC with {len(new_toc)} chapters from course JSON")
-        except Exception as e:
-            logger.error(f"Failed to map chapters to TOC: {str(e)}")
-        
-        
-    def process_document(self) -> Dict:
-        """Main document processing method"""
-        try:
-            if self.course_json:
-                self._map_chapters_to_toc()
-            
-            return {
-                'status': 'success',
-                'metadata': self._extract_metadata(),
-                'chapters': self._process_toc(),
-                'images': self._extract_images(),
-                'text_elements': self._extract_text_with_unstructured()
-            }
-        except Exception as e:
-            return {
-                'status': 'error',
-                'message': str(e)
-            }
-    def _chunk_by_subtopics(self, text_elements: List[Dict], images: List[Dict]) -> List[Dict]:
-        """Create subtopic chunks using JSON structure"""
-        try:
-            if not self.course_json:
-                logger.warning("No course JSON available for chunking")
-                return []
-                
-            # Validate chapter_map is populated
-            if not self.chapter_map:
-                logger.warning("Chapter map is empty, cannot create subtopic chunks")
-                return []
-                
-            chunks = []
-            
-            for json_chap, chap_data in self.chapter_map.items():
-                # Get elements for this chapter
-                chap_elements = [
-                    e for e in text_elements
-                    if chap_data['start_page'] <= e['metadata']['page_number'] <= chap_data['end_page']
-                ]
-                
-                current_chunk = []
-                current_subtopic = None
-                buffer_images = []
-                
-                for elem in chap_elements:
-                    if self._is_subtopic_header(elem, chap_data['subtopics']):
-                        if current_subtopic:
-                            chunks.append(self._create_subtopic_chunk(
-                                current_chunk,
-                                current_subtopic,
-                                buffer_images,
-                                images
-                            ))
-                            buffer_images = []
-                        current_subtopic = self._match_subtopic(elem['text'], chap_data['subtopics'])
-                        current_chunk = [elem]
-                    else:
-                        current_chunk.append(elem)
-                    
-                    if elem['type'] == 'Image':
-                        buffer_images.append(elem['metadata'])
-                
-                if current_subtopic:
-                    chunks.append(self._create_subtopic_chunk(
-                        current_chunk,
-                        current_subtopic,
-                        buffer_images,
-                        images
-                    ))
-                    
-            
-            return chunks
-            
-        except Exception as e:
-            # Handle chunking errors
-            logger.error(f"Subtopic chunking failed: {str(e)}")
-            # Fallback to chapter-based chunking
-            
-            return self.process_document(True,True,True)
-
-    def _is_subtopic_header(self, element: Dict, subtopics: Dict) -> bool:
-        """Check if element is a subtopic header"""
-        text = element['text'].lower()
-        return any(
-            fuzz.partial_ratio(text, f"{num} {title.lower()}") > 85
-            for num, title in subtopics.items()
-        )
-
-    def _match_subtopic(self, text: str, subtopics: Dict) -> Optional[str]:
-        """Find best matching subtopic code"""
-        best_match = max(
-            subtopics.items(),
-            key=lambda item: fuzz.partial_ratio(text.lower(), f"{item[0]} {item[1].lower()}"),
-            default=None
-        )
-        return best_match[0] if best_match else None
-
-    def _create_subtopic_chunk(self, elements: List, subtopic_code: str, 
-                             buffer_images: List, all_images: List) -> Dict:
-        """Create chunk JSON with image associations"""
-        pages = {e['metadata']['page_number'] for e in elements}
-        chunk_images = [
-            img for img in all_images
-            if img['page_number'] in pages
-        ] + buffer_images
-        
-        return {
-            "subtopic_code": subtopic_code,
-            "content": " ".join(e['text'] for e in elements),
-            "images": [img['path'] for img in chunk_images],
-            "page_range": {
-                "start": min(e['metadata']['page_number'] for e in elements),
-                "end": max(e['metadata']['page_number'] for e in elements)
-            }
-        }
-
+ 
     def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
                         text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -644,6 +468,16 @@ class PDFParser:
         
         return result
 
+  
+        
+    # def process_book(self) -> Dict[str, Any]:
+    #     """
+    #     Process a book PDF document
+    #     @returns: Dict[str, Any] - Document structure with metadata and content
+    #     @description: Processes the PDF as a book, extracting metadata, text, and images
+    #     """
+    #     return self.process_document(extract_images=True, extract_text=True, save_json=True)
+
     def process_document(self, extract_images: bool = True, 
                          extract_text: bool = True, 
                          save_json: bool = True) -> Dict[str, Any]:
@@ -658,7 +492,7 @@ class PDFParser:
                      including metadata, chapters, and paths to extracted content.
         """
         try:
-        # Initialize result structure with default values
+            # Initialize result structure with default values
             result = {
                 'status': 'success',
                 'metadata': {},
@@ -668,13 +502,6 @@ class PDFParser:
                 'chunks': [],
                 'course_json': False
             }
-
-            # Load existing course JSON if available
-            try:
-                self._load_course_json()
-            except Exception as e:
-                logger.warning(f"Failed to load course JSON, proceeding without it: {str(e)}")
-                self.course_json = None
             
             # Extract core components
             result['metadata'] = self._extract_metadata()
