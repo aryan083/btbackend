@@ -293,6 +293,57 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "RAG Operations",
+      "item": [
+        {
+          "name": "Generate HTML Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"document_dir\": \"app/static/uploads/Forozon\",\n    \"course_id\": \"b8c30d7c-56c5-4439-a235-8a756471278f\",\n    \"output_dir\": \"output\",\n    \"match_threshold\": 0.7,\n    \"max_results\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag", "generate"]
+            },
+            "description": "Generate HTML content for course materials using RAG"
+          },
+          "response": []
+        },
+        {
+          "name": "Process Course Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"base_path\": \"app/static/uploads/Forozon/Forozon\",\n    \"course_id\": \"b8c30d7c-56c5-4439-a235-8a756471278f\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag", "process"]
+            },
+            "description": "Process course content (text and images) for RAG generation"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -301,4 +352,4 @@
       "value": "http://localhost:5000"
     }
   ]
-}
+} 

@@ -9,6 +9,7 @@ import logging
 from pythonjsonlogger import jsonlogger
 import os
 from dotenv import load_dotenv
+import sys
 
 # Load environment variables
 load_dotenv()
@@ -48,19 +49,38 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = str(upload_dir)
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 16MB max file size
     
+    # Configure watchdog to ignore PyTorch library files
+    if sys.platform == 'win32':
+        import watchdog.observers
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+        
+        class IgnorePyTorchHandler(FileSystemEventHandler):
+            def on_modified(self, event):
+                if 'torch' in event.src_path:
+                    return
+                super().on_modified(event)
+        
+        observer = Observer()
+        observer.schedule(IgnorePyTorchHandler(), path=sys.prefix, recursive=True)
+        observer.start()
+    
     # Register blueprints with error handling
     try:
         from .controllers.rag_controller import rag_bp
         app.register_blueprint(rag_bp, url_prefix='/api')
         
-        from app.controllers.course_controller import course_bp
+        from .controllers.course_controller import course_bp
         app.register_blueprint(course_bp, url_prefix='/api')
         logging.info("Successfully registered course blueprint")
         
-        from app.controllers.directory_controller import directory_bp
+        from .controllers.directory_controller import directory_bp
         app.register_blueprint(directory_bp, url_prefix='/api')
         logging.info("Successfully registered directory blueprint")
         
+        from .controllers.rag_generation_controller import rag_generation_bp
+        app.register_blueprint(rag_generation_bp, url_prefix='/api/rag')
+        logging.info("Successfully registered rag generation blueprint")
         
         # Add a simple health check route
         @app.route('/health', methods=['GET'])
