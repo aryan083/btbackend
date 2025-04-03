@@ -80,6 +80,7 @@ def generate_content() -> tuple[Dict[str, Any], int]:
             "generated_files": list(generated_files.keys())
         }), 200
 
+
     except ValueError as e:
         logger.error(f"Invalid parameter value: {str(e)}")
         return jsonify({

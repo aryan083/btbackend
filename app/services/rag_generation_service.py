@@ -63,13 +63,14 @@ class RAGGenerationService:
     @property
     def embedding_model(self):
         """
-        Lazy load the embedding model.
+        Lazy load the embedding model from local directory.
         
         Returns:
             The initialized embedding model
         """
         if self._embedding_model is None:
-            self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
+            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2')
+            self._embedding_model = SentenceTransformer(model_path)
         return self._embedding_model
 
     def sanitize_path(self, name: str) -> str:
