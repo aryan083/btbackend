@@ -5,10 +5,11 @@ This module provides endpoints for generating HTML content using RAG techniques.
 
 import logging
 from typing import Dict, Any
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify,current_app
 from werkzeug.exceptions import HTTPException
 from app.services.rag_generation_service import RAGGenerationService
 from app.config import Config
+from pathlib import Path
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -56,7 +57,7 @@ def generate_content() -> tuple[Dict[str, Any], int]:
         # Extract parameters with defaults
         document_dir = data['document_dir']
         course_id = data['course_id']
-        output_dir = data.get('output_dir', 'output')
+        output_dir = Path(current_app.config['UPLOAD_FOLDER']/'article')
         match_threshold = float(data.get('match_threshold', 0.7))
         max_results = int(data.get('max_results', 5))
 

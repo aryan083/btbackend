@@ -15,7 +15,7 @@ SUPABASE_KEY = os.getenv('VITE_SUPABASE_ANON_KEY')
 
 # File paths
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads')
-OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'output')
+OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads')
 
 # RAG settings
 MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', '0.7'))

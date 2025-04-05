@@ -47,7 +47,7 @@ class PDFParser:
             raise ValueError(f"File is not a PDF: {pdf_path}")
             
         self.book_name = self.pdf_path.stem
-        self.output_dir = Path(output_base_dir) / self.book_name
+        self.output_dir = Path(output_base_dir)
         self.text_dir = self.output_dir / "Text"
         self.images_dir = self.output_dir / "Images"
         self.course_json = None

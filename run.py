@@ -32,7 +32,8 @@ def run_development_server():
     app.run(
         host=Config.HOST,
         port=Config.PORT,
-        debug=True
+        debug=True,
+        use_reloader=False
     )
 
 def run_production_server():

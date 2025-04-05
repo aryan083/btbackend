@@ -255,7 +255,7 @@ class RAGGenerationService:
 
     def process_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
-        Process both text and image content for a course.
+        Process both text and image content for a course and generate HTML articles.
         
         Args:
             base_path (str): Base path containing Text and Images directories
@@ -268,6 +268,7 @@ class RAGGenerationService:
             results = {
                 "text_processed": 0,
                 "image_processed": 0,
+                "articles_generated": 0,
                 "errors": []
             }
             
@@ -281,6 +282,26 @@ class RAGGenerationService:
             results["image_processed"] = image_results["processed"]
             results["errors"].extend(image_results["errors"])
             
+            # Generate and store HTML articles
+            try:
+                # Create articles directory if it doesn't exist
+                articles_dir = Path(base_path) / "Articles"
+                articles_dir.mkdir(exist_ok=True)
+                
+                # Generate articles from processed content
+                article_results = self._generate_articles(
+                    base_path=base_path,
+                    course_id=course_id,
+                    output_dir=str(articles_dir)
+                )
+                
+                results["articles_generated"] = article_results["generated"]
+                results["errors"].extend(article_results["errors"])
+                
+            except Exception as e:
+                logger.error(f"Article generation failed: {str(e)}")
+                results["errors"].append(f"Article generation failed: {str(e)}")
+            
             return results
             
         except Exception as e:
@@ -288,6 +309,7 @@ class RAGGenerationService:
             return {
                 "text_processed": 0,
                 "image_processed": 0,
+                "articles_generated": 0,
                 "errors": [str(e)]
             }
 
@@ -473,4 +495,127 @@ class RAGGenerationService:
             return True
         except Exception as e:
             logger.error(f"Supabase insert error: {e}")
-            return False 
+            return False
+
+    def _generate_articles(self, base_path: str, course_id: str, output_dir: str) -> Dict[str, Any]:
+        """
+        Generate HTML articles from processed content.
+        
+        Args:
+            base_path (str): Base path containing processed content
+            course_id (str): ID of the course
+            output_dir (str): Directory to store generated articles
+            
+        Returns:
+            Dict[str, Any]: Generation results and statistics
+        """
+        try:
+            results = {
+                "generated": 0,
+                "errors": []
+            }
+            
+            # Load course structure
+            course_structure = self.get_course_structure(base_path)
+            
+            # Create output directory
+            output_path = Path(output_dir)
+            output_path.mkdir(parents=True, exist_ok=True)
+            
+            # Process each chapter
+            for chapter_name, chapter_data in course_structure.get("Chapters", {}).items():
+                try:
+                    # Create chapter directory
+                    chapter_dir = output_path / self.sanitize_path(chapter_name)
+                    chapter_dir.mkdir(exist_ok=True)
+                    
+                    # Process each subtopic
+                    for subtopic_code, subtopic_name in chapter_data.items():
+                        try:
+                            # Generate article content
+                            article_content = self._generate_article_content(
+                                subtopic_name=subtopic_name,
+                                subtopic_code=subtopic_code,
+                                course_id=course_id
+                            )
+                            
+                            # Save article
+                            article_filename = f"{self.sanitize_path(subtopic_code)}.html"
+                            article_path = chapter_dir / article_filename
+                            
+                            with open(article_path, 'w', encoding='utf-8') as f:
+                                f.write(article_content)
+                            
+                            results["generated"] += 1
+                            logger.info(f"Generated article: {article_path}")
+                            
+                        except Exception as e:
+                            error_msg = f"Failed to generate article for {subtopic_code}: {str(e)}"
+                            logger.error(error_msg)
+                            results["errors"].append(error_msg)
+                            
+                except Exception as e:
+                    error_msg = f"Failed to process chapter {chapter_name}: {str(e)}"
+                    logger.error(error_msg)
+                    results["errors"].append(error_msg)
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"Article generation failed: {str(e)}")
+            return {
+                "generated": 0,
+                "errors": [str(e)]
+            }
+
+    def _generate_article_content(self, subtopic_name: str, subtopic_code: str, course_id: str) -> str:
+        """
+        Generate HTML content for a single article.
+        
+        Args:
+            subtopic_name (str): Name of the subtopic
+            subtopic_code (str): Code of the subtopic
+            course_id (str): ID of the course
+            
+        Returns:
+            str: Generated HTML content
+        """
+        try:
+            # Generate embedding for the subtopic
+            query_text = f"Comprehensive technical explanation of {subtopic_name}"
+            query_embedding = self.embedding_model.encode(query_text).tolist()
+            
+            # Retrieve relevant context
+            context = self._retrieve_context(
+                query_embedding=query_embedding,
+                course_id=course_id,
+                match_threshold=0.7,
+                max_results=5
+            )
+            
+            # Generate content using Gemini
+            prompt = f"""Generate a comprehensive HTML article about {subtopic_name} ({subtopic_code}).
+            Include:
+            
+            - Detailed explanation
+            - Technical concepts
+            - Examples
+            - Implementation details
+            - Best practices
+            
+            Context materials:
+            {context}
+            
+            Requirements:
+            - Use semantic HTML5
+            - Include code samples in <pre><code>
+            - Use tables for comparisons
+            - Include relevant images
+            """
+            
+            response = self.gemini_model.generate_content(prompt)
+            return response.text
+            
+        except Exception as e:
+            logger.error(f"Failed to generate article content for {subtopic_code}: {str(e)}")
+            raise 
