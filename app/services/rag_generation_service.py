@@ -9,7 +9,7 @@ import os
 import json
 import logging
 import uuid
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union
 from pathlib import Path
 from PIL import Image
 import google.generativeai as genai
@@ -108,7 +108,13 @@ class RAGGenerationService:
                             course_id: str,
                             output_dir: str = "output",
                             match_threshold: float = 0.7, 
-                            max_results: int = 5) -> Dict[str, str]:
+                            max_results: int = 5,
+                            user_prompt: str = "",
+                            teaching_pattern: Union[str, List[str]] = "",
+                            skill_level: str = "",
+                            topic_metadata: Dict[str, str] = {},
+                            user_id: str = "",                            
+                            ) -> Dict[str, Any]:
         """
         Generate HTML content for all subtopics using RAG.
         
@@ -118,19 +124,26 @@ class RAGGenerationService:
             output_dir (str): Directory to save generated HTML files
             match_threshold (float): Threshold for vector similarity matching
             max_results (int): Maximum number of results to retrieve
+            user_prompt (str): User's specific requirements for content
+            teaching_pattern (Union[str, List[str]]): Preferred teaching pattern (e.g., case studies, stories)
+            skill_level (str): User's skill level (1=beginner, 2=intermediate, 3=advanced)
+            topic_metadata (Dict[str, str]): Mapping of topic names to their IDs
+            user_id (str): ID of the user requesting the content
             
         Returns:
-            Dict[str, str]: Dictionary mapping file paths to generated content
+            Dict[str, Any]: Dictionary containing generated files and their metadata
         """
         try:
             course_structure = self.get_course_structure(document_dir)
             
             if not course_structure.get("Chapters"):
                 logger.error("Invalid course structure format")
-                return {}
+                return {"files": {}, "articles": [], "errors": ["Invalid course structure format"]}
 
             os.makedirs(output_dir, exist_ok=True)
             generated_files = {}
+            generated_articles = []
+            errors = []
 
             for chapter_name, chapter_data in course_structure["Chapters"].items():
                 if not isinstance(chapter_data, dict):
@@ -159,26 +172,69 @@ class RAGGenerationService:
                             max_results
                         )
 
-                        # Generate content
-                        content = self._generate_content(subtopic_name, subtopic_code, context)
+                        # Generate content with user preferences
+                        content = self._generate_content(
+                            subtopic_name, 
+                            subtopic_code, 
+                            context,
+                            skill_level,
+                            user_prompt,
+                            teaching_pattern
+                        )
                         
-                        # Save content
+                        # Save content to file
                         filename = f"{safe_subtopic}.html"
                         filepath = os.path.normpath(os.path.join(chapter_dir, filename))
                         with open(filepath, 'w', encoding='utf-8') as f:
                             f.write(content)
                         
-                        generated_files[filepath] = content
-                        logger.info(f"Created: {filepath}")
+                        # Save article to Supabase
+                        article_id = self._save_article_to_supabase(
+                            course_id=course_id,
+                            chapter_name=chapter_name,
+                            subtopic_code=subtopic_code,
+                            subtopic_name=subtopic_name,
+                            content=content,
+                            filepath=filepath,
+                            user_id=user_id,
+                            skill_level=skill_level,
+                            teaching_pattern=teaching_pattern,
+                            topic_metadata=topic_metadata
+                        )
+                        
+                        if article_id:
+                            generated_articles.append({
+                                "article_id": article_id,
+                                "article_name": f"{subtopic_name} - {subtopic_code}",
+                                "filepath": filepath,
+                                "topic_id": topic_metadata.get(subtopic_name)
+                            })
+                            generated_files[filepath] = content
+                            logger.info(f"Created and saved article: {filepath}")
+                        else:
+                            error_msg = f"Failed to save article for {subtopic_code}"
+                            errors.append(error_msg)
+                            logger.error(error_msg)
 
                     except Exception as subtopic_error:
-                        logger.error(f"Failed {subtopic_code}: {str(subtopic_error)}")
+                        error_msg = f"Failed {subtopic_code}: {str(subtopic_error)}"
+                        errors.append(error_msg)
+                        logger.error(error_msg)
 
-            return generated_files
+            return {
+                "files": generated_files,
+                "articles": generated_articles,
+                "errors": errors
+            }
 
         except Exception as e:
-            logger.error(f"Generation failed: {str(e)}")
-            return {}
+            error_msg = f"Generation failed: {str(e)}"
+            logger.error(error_msg)
+            return {
+                "files": {},
+                "articles": [],
+                "errors": [error_msg]
+            }
 
     def _retrieve_context(self, 
                          query_embedding: List[float], 
@@ -215,7 +271,9 @@ class RAGGenerationService:
             logger.warning(f"Vector search failed: {str(e)}")
             return ""
 
-    def _generate_content(self, subtopic_name: str, subtopic_code: str, context: str) -> str:
+    def _generate_content(self, subtopic_name: str, subtopic_code: str, context: str, 
+                         skill_level: str = "", user_prompt: str = "", 
+                         teaching_pattern: Union[str, List[str]] = "") -> str:
         """
         Generate HTML content using Gemini model.
         
@@ -223,20 +281,59 @@ class RAGGenerationService:
             subtopic_name (str): Name of the subtopic
             subtopic_code (str): Code of the subtopic
             context (str): Retrieved context
+            skill_level (str): User's skill level (1=beginner, 2=intermediate, 3=advanced)
+            user_prompt (str): User's specific requirements for content
+            teaching_pattern (Union[str, List[str]]): Preferred teaching pattern (e.g., case studies, stories)
             
         Returns:
             str: Generated HTML content
         """
+        # Determine skill level description
+        skill_level_desc = ""
+        if skill_level == "1":
+            skill_level_desc = "beginner-friendly with basic concepts and simple explanations"
+        elif skill_level == "2":
+            skill_level_desc = "intermediate level with balanced theory and practical applications"
+        elif skill_level == "3":
+            skill_level_desc = "advanced level with complex concepts and in-depth technical details"
+        
+        # Build teaching pattern instructions
+        teaching_instructions = ""
+        if teaching_pattern:
+            # Handle both string and list types for teaching_pattern
+            if isinstance(teaching_pattern, list):
+                teaching_pattern_str = ', '.join(teaching_pattern)
+            else:
+                teaching_pattern_str = teaching_pattern
+                
+            if "case studies" in teaching_pattern_str.lower():
+                teaching_instructions += "- Include multiple real-world case studies\n"
+            if "stories" in teaching_pattern_str.lower():
+                teaching_instructions += "- Use storytelling approach to explain concepts\n"
+            if "examples" in teaching_pattern_str.lower():
+                teaching_instructions += "- Provide numerous practical examples\n"
+            if "visual" in teaching_pattern_str.lower():
+                teaching_instructions += "- Focus on visual explanations and diagrams\n"
+            if "hands-on" in teaching_pattern_str.lower():
+                teaching_instructions += "- Include hands-on exercises and tutorials\n"
+        
+        # If no specific teaching patterns were matched, use default
+        if not teaching_instructions:
+            teaching_instructions = "- Multiple practical examples\n- Real-world implementation scenarios\n"
+        
         prompt = f"""Generate exhaustive HTML body content about {subtopic_name} ({subtopic_code}).
-        Use ALL available token capacity for depth and detail. Include:
+        Use ALL available token capacity for depth and detail. The content should be {skill_level_desc}.
+        
+        Include:
         
         - Comprehensive definition section
         - Detailed technical breakdown of components
-        - Multiple practical examples
-        - Real-world implementation scenarios
+        {teaching_instructions}
         - Common pitfalls and troubleshooting
         - Advanced usage patterns
         - Cross-references to related concepts
+        
+        {user_prompt}
         
         Context materials:
         {context}
@@ -248,10 +345,12 @@ class RAGGenerationService:
         - Technical depth over brevity
         - Tables for comparative analysis
         - Code samples in <pre><code>
+        - DO NOT include any images in the generated content
+        - Use the full token capacity for maximum detail and comprehensiveness
         """
 
         response = self.gemini_model.generate_content(prompt)
-        return response.text 
+        return response.text
 
     def process_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
@@ -619,3 +718,120 @@ class RAGGenerationService:
         except Exception as e:
             logger.error(f"Failed to generate article content for {subtopic_code}: {str(e)}")
             raise 
+
+    def _save_article_to_supabase(self, 
+                                 course_id: str,
+                                 chapter_name: str,
+                                 subtopic_code: str,
+                                 subtopic_name: str,
+                                 content: str,
+                                 filepath: str,
+                                 user_id: str = "",
+                                 skill_level: str = "",
+                                 teaching_pattern: Union[str, List[str]] = "",
+                                 topic_metadata: Dict[str, str] = {}) -> Optional[str]:
+        """
+        Save generated article to Supabase and update topic relationship.
+        
+        Args:
+            course_id (str): ID of the course
+            chapter_name (str): Name of the chapter
+            subtopic_code (str): Code of the subtopic
+            subtopic_name (str): Name of the subtopic
+            content (str): Generated HTML content
+            filepath (str): Path to the saved file
+            user_id (str): ID of the user requesting the content
+            skill_level (str): User's skill level
+            teaching_pattern (Union[str, List[str]]): Preferred teaching pattern
+            topic_metadata (Dict[str, str]): Mapping of topic names to their IDs
+            
+        Returns:
+            Optional[str]: Article ID if successful, None otherwise
+        """
+        try:
+            # Find topic_id from metadata
+            topic_id = topic_metadata.get(subtopic_name)
+            if not topic_id:
+                logger.error(f"No topic ID found for subtopic: {subtopic_name}")
+                return None
+
+            # Create article record
+            article_data = {
+                "article_name": f"{subtopic_name} - {subtopic_code}",
+                "tags": {
+                    "course_id": course_id,
+                    "chapter_name": chapter_name,
+                    "subtopic_code": subtopic_code,
+                    "skill_level": skill_level,
+                    "teaching_pattern": teaching_pattern
+                },
+                "content_text": content,
+                "topic_id": topic_id,
+                "is_completed": True,
+                "user_id": user_id if user_id else None
+            }
+            
+            # Insert article into Supabase
+            response = self.supabase_client.table("articles").insert(article_data).execute()
+            
+            if not response.data:
+                logger.error("Failed to save article: No data returned")
+                return None
+                
+            article_id = response.data[0].get('article_id')
+            if not article_id:
+                logger.error("No article ID returned from insert")
+                return None
+                
+            # Update topic's articles_json
+            self._update_topic_articles(topic_id, article_id)
+            
+            logger.info(f"Article saved successfully with ID: {article_id}")
+            return article_id
+                
+        except Exception as e:
+            logger.error(f"Error saving article to Supabase: {str(e)}")
+            return None
+            
+    def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
+        """
+        Update topic's articles_json field with new article ID.
+        
+        Args:
+            topic_id (str): ID of the topic
+            article_id (str): ID of the article to add
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        try:
+            # First get current articles_json
+            response = self.supabase_client.table("topics").select("articles_json").eq("topic_id", topic_id).execute()
+            
+            if not response.data:
+                logger.error(f"Topic not found: {topic_id}")
+                return False
+                
+            current_articles = response.data[0].get('articles_json', []) or []
+            if not isinstance(current_articles, list):
+                current_articles = []
+                
+            # Add new article ID if not already present
+            if article_id not in current_articles:
+                current_articles.append(article_id)
+                
+            # Update topic
+            update_response = self.supabase_client.table("topics").update(
+                {"articles_json": current_articles}
+            ).eq("topic_id", topic_id).execute()
+            
+            if update_response.data:
+                logger.info(f"Updated topic {topic_id} with article {article_id}")
+                return True
+            else:
+                logger.error(f"Failed to update topic {topic_id}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating topic articles: {str(e)}")
+            return False 

@@ -69,6 +69,7 @@ def create_app(config_name=None):
     try:
         from .controllers.rag_controller import rag_bp
         app.register_blueprint(rag_bp, url_prefix='/api')
+        logging.info("Successfully registered RAG blueprint")
         
         from .controllers.course_controller import course_bp
         app.register_blueprint(course_bp, url_prefix='/api')
@@ -79,7 +80,7 @@ def create_app(config_name=None):
         logging.info("Successfully registered directory blueprint")
         
         from .controllers.rag_generation_controller import rag_generation_bp
-        app.register_blueprint(rag_generation_bp, url_prefix='/api/rag')
+        app.register_blueprint(rag_generation_bp, url_prefix='/api')
         logging.info("Successfully registered rag generation blueprint")
         
         # Add a simple health check route
