@@ -12,6 +12,11 @@ load_dotenv()
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 SUPABASE_URL = os.getenv('VITE_SUPABASE_URL')
 SUPABASE_KEY = os.getenv('VITE_SUPABASE_ANON_KEY')
+SHUTTERSTOCK_API_KEY = os.getenv('SHUTTERSTOCK_API_KEY')
+SHUTTERSTOCK_API_SECRET = os.getenv('SHUTTERSTOCK_API_SECRET')
+PEXELS_API_KEY = os.getenv('PEXELS_API_KEY')
+UNSPLASH_API_KEY = os.getenv('UNSPLASH_API_KEY')
+
 
 # File paths
 UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads')
@@ -31,6 +36,10 @@ class Config:
     GEMINI_API_KEY = GEMINI_API_KEY
     SUPABASE_URL = SUPABASE_URL
     SUPABASE_KEY = SUPABASE_KEY
+    SHUTTERSTOCK_API_KEY = SHUTTERSTOCK_API_KEY
+    SHUTTERSTOCK_API_SECRET = SHUTTERSTOCK_API_SECRET
+    PEXELS_API_KEY = PEXELS_API_KEY
+    UNSPLASH_API_KEY = UNSPLASH_API_KEY
     
     # Environment settings
     ENVIRONMENT = ENVIRONMENT
@@ -57,6 +66,15 @@ class Config:
             raise ValueError("VITE_SUPABASE_URL environment variable is not set")
         if not cls.SUPABASE_KEY:
             raise ValueError("VITE_SUPABASE_ANON_KEY environment variable is not set")
+        if not cls.SHUTTERSTOCK_API_KEY:
+            raise ValueError("SHUTTERSTOCK_API_KEY environment variable is not set")
+        if not cls.SHUTTERSTOCK_API_SECRET:
+            raise ValueError("SHUTTERSTOCK_API_SECRET environment variable is not set")
+        if not cls.PEXELS_API_KEY:
+            raise ValueError("PEXELS_API_KEY environment variable is not set")
+        if not cls.UNSPLASH_API_KEY:
+            raise ValueError("UNSPLASH_API_KEY environment variable is not set")
+        
         
         # Create necessary directories
         os.makedirs(cls.UPLOAD_FOLDER, exist_ok=True)

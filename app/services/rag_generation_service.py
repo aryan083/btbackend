@@ -64,7 +64,7 @@ class RAGGenerationService:
     def embedding_model(self):
         """
         Lazy load the embedding model from local directory.
-        If the model doesn't exist, it will be downloaded.
+        If the model doesn't exist or is incomplete, it will be downloaded.
         
         Returns:
             The initialized embedding model
@@ -72,21 +72,36 @@ class RAGGenerationService:
         if self._embedding_model is None:
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2')
             
-            # Check if model directory exists, if not download it
-            if not os.path.exists(model_path):
-                logger.info(f"Model not found at {model_path}. Downloading...")
-                try:
-                    # Download the model
-                    self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
-                    # Save the model to the specified path
-                    self._embedding_model.save(model_path)
-                    logger.info(f"Model downloaded and saved to {model_path}")
-                except Exception as e:
-                    logger.error(f"Error downloading model: {str(e)}")
-                    raise
-            else:
-                logger.info(f"Loading model from {model_path}")
-                self._embedding_model = SentenceTransformer(model_path)
+            try:
+                # Try to load the model if it exists
+                if os.path.exists(model_path):
+                    try:
+                        self._embedding_model = SentenceTransformer(model_path)
+                        # Verify model is loaded correctly by encoding a test string
+                        self._embedding_model.encode("test")
+                        logger.info(f"Successfully loaded model from {model_path}")
+                        return self._embedding_model
+                    except Exception as e:
+                        logger.warning(f"Failed to load existing model: {str(e)}")
+                        # If loading fails, delete the incomplete/corrupted model directory
+                        import shutil
+                        shutil.rmtree(model_path, ignore_errors=True)
+                        logger.info(f"Removed incomplete model directory: {model_path}")
+                
+                # Download fresh copy of the model
+                logger.info(f"Downloading model to {model_path}")
+                self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
+                
+                # Verify the model works before saving
+                self._embedding_model.encode("test")
+                
+                # Save the verified model
+                self._embedding_model.save(model_path)
+                logger.info(f"Model downloaded and saved to {model_path}")
+                
+            except Exception as e:
+                logger.error(f"Error initializing embedding model: {str(e)}")
+                raise
                 
         return self._embedding_model
 

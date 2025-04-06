@@ -12,3 +12,4 @@ tests/
 output/large_file.ext
 app/all-mpnet-base-v2
 app/all-mpnet-base-v2/
+/app/all-mpnet-base-v2

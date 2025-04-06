@@ -4,15 +4,15 @@ import requests
 import json
 import google.generativeai as genai
 from requests.auth import HTTPBasicAuth
-
+from app.config import Config
 def init_gemini():
-    genai.configure(api_key="AIzaSyDNcnPNLS0Qg3Wjan8L-ok3V3pjb-4-1iQ")
+    genai.configure(api_key=Config.GEMINI_API_KEY)
     model = genai.GenerativeModel('gemini-2.0-flash')
     return model
 
 def init_supabase():
-    VITE_SUPABASE_URL="https://mouwhbulaoghvsxbvmwj.supabase.co"
-    VITE_SUPABASE_ANON_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdXdoYnVsYW9naHZzeGJ2bXdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0NjI1NzQsImV4cCI6MjA1NjAzODU3NH0.52PcqiCjO8L1VU1lY7t01VLVSD_Cvz0OQFuPfT7lJ2w"
+    VITE_SUPABASE_URL=Config.SUPABASE_URL
+    VITE_SUPABASE_ANON_KEY=Config.SUPABASE_KEY
 
     supabase_url = VITE_SUPABASE_URL
     supabase_key = VITE_SUPABASE_ANON_KEY
@@ -50,7 +50,7 @@ def get_best_image(client,image_links,article_content):
 
     
 def query_unsplash(query,num_images):
-    access_key = "9l9BYiRN2d3BjXbI4SjFzlnPkGJNBPUIecGKVzyN5b0"  # Replace with your Unsplash API access key
+    access_key = Config.UNSPLASH_API_KEY  # Replace with your Unsplash API access key
     url = f"https://api.unsplash.com/search/photos?query={query}&per_page={num_images}&client_id={access_key}"
     response = requests.get(url)
     data = json.loads(response.text)
@@ -102,8 +102,8 @@ def unsplash_api_fetcher(article_id):
 
 def search_image(query):
     # Your Shutterstock API credentials
-    api_key = 'mHB5wurBT22jAjgluyG3pABAAgOLwLut'
-    api_secret = 'o2R3VjlPLGfFAtkb'
+    api_key = Config.SHUTTERSTOCK_API_KEY
+    api_secret = Config.SHUTTERSTOCK_API_SECRET
     
     # Get access token
     token_url = 'https://api.shutterstock.com/v2/oauth/access_token'
@@ -132,7 +132,7 @@ def search_image(query):
 
 
 def search_pexels(query):
-    api_key = "hWGudU4S7Mygp8JMCpvSESQPfTDYhN57w3Q6nfeabQ7fetAeAQQyxScf"  
+    api_key = Config.PEXELS_API_KEY
     url = f"https://api.pexels.com/v1/search?query={query}&per_page=1"
     headers = {"Authorization": api_key}
     
