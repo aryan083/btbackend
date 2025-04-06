@@ -9,4 +9,4 @@ data/
 static/
 uploads/
 tests/
-output/
+output/large_file.ext
