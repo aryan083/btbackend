@@ -64,13 +64,30 @@ class RAGGenerationService:
     def embedding_model(self):
         """
         Lazy load the embedding model from local directory.
+        If the model doesn't exist, it will be downloaded.
         
         Returns:
             The initialized embedding model
         """
         if self._embedding_model is None:
             model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2')
-            self._embedding_model = SentenceTransformer(model_path)
+            
+            # Check if model directory exists, if not download it
+            if not os.path.exists(model_path):
+                logger.info(f"Model not found at {model_path}. Downloading...")
+                try:
+                    # Download the model
+                    self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
+                    # Save the model to the specified path
+                    self._embedding_model.save(model_path)
+                    logger.info(f"Model downloaded and saved to {model_path}")
+                except Exception as e:
+                    logger.error(f"Error downloading model: {str(e)}")
+                    raise
+            else:
+                logger.info(f"Loading model from {model_path}")
+                self._embedding_model = SentenceTransformer(model_path)
+                
         return self._embedding_model
 
     def sanitize_path(self, name: str) -> str:
