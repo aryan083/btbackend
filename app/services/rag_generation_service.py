@@ -382,7 +382,7 @@ class RAGGenerationService:
         """
 
         response = self.gemini_model.generate_content(prompt)
-        return response.text
+        return self._clean_html_content(response.text)
 
     def process_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
@@ -787,6 +787,9 @@ class RAGGenerationService:
                 logger.error(f"No topic ID found for subtopic: {subtopic_name}")
                 return None
 
+            # Clean the content before saving
+            cleaned_content = self._clean_html_content(content)
+
             # Create article record
             article_data = {
                 "article_name": f"{subtopic_name} - {subtopic_code}",
@@ -797,7 +800,7 @@ class RAGGenerationService:
                     "skill_level": skill_level,
                     "teaching_pattern": teaching_pattern
                 },
-                "content_text": content,
+                "content_text": cleaned_content,
                 "topic_id": topic_id,
                 "is_completed": True,
                 "user_id": user_id if user_id else None
@@ -843,22 +846,35 @@ class RAGGenerationService:
             if not response.data:
                 logger.error(f"Topic not found: {topic_id}")
                 return False
-                
-            current_articles = response.data[0].get('articles_json', []) or []
+            
+            # Handle the articles_json array
+            current_articles = response.data[0].get('articles_json', [])
+            if current_articles is None:
+                current_articles = []
+            elif isinstance(current_articles, str):
+                try:
+                    current_articles = json.loads(current_articles)
+                except:
+                    current_articles = []
+            
             if not isinstance(current_articles, list):
                 current_articles = []
-                
+            
             # Add new article ID if not already present
             if article_id not in current_articles:
                 current_articles.append(article_id)
-                
-            # Update topic
-            update_response = self.supabase_client.table("topics").update(
-                {"articles_json": current_articles}
-            ).eq("topic_id", topic_id).execute()
+            
+            # Convert to JSON string if needed
+            articles_json = json.dumps(current_articles) if isinstance(current_articles, list) else "[]"
+            
+            # Update topic with the new array
+            update_response = self.supabase_client.table("topics").update({
+                "articles_json": articles_json
+            }).eq("topic_id", topic_id).execute()
             
             if update_response.data:
                 logger.info(f"Updated topic {topic_id} with article {article_id}")
+                logger.info(f"Current articles: {articles_json}")
                 return True
             else:
                 logger.error(f"Failed to update topic {topic_id}")
@@ -866,4 +882,26 @@ class RAGGenerationService:
                 
         except Exception as e:
             logger.error(f"Error updating topic articles: {str(e)}")
-            return False 
+            return False
+
+    def _clean_html_content(self, content: str) -> str:
+        """
+        Clean and format HTML content.
+        
+        Args:
+            content (str): Raw HTML content
+            
+        Returns:
+            str: Cleaned HTML content
+        """
+        # Remove any backticks that might be in the content
+        content = re.sub(r'```html?\s*', '', content)
+        content = re.sub(r'```\s*$', '', content)
+        
+        # Remove any extra whitespace
+        content = re.sub(r'\s+', ' ', content)
+        
+        # Ensure proper HTML formatting
+        content = content.strip()
+        
+        return content 
