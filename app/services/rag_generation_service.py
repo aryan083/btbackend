@@ -3,7 +3,6 @@ Service module for handling RAG (Retrieval Augmented Generation) operations.
 This module provides functionality for generating HTML content using RAG techniques
 with Supabase vector store and Google's Gemini model.
 """
-
 import re
 import os
 import json
@@ -135,18 +134,20 @@ class RAGGenerationService:
             logger.error(f"Error loading course structure: {str(e)}")
             return {"Chapters": {}}
 
-    def generate_html_content(self, 
-                            document_dir: str, 
-                            course_id: str,
-                            output_dir: str = "output",
-                            match_threshold: float = 0.7, 
-                            max_results: int = 5,
-                            user_prompt: str = "",
-                            teaching_pattern: Union[str, List[str]] = "",
-                            skill_level: str = "",
-                            topic_metadata: Dict[str, str] = {},
-                            user_id: str = "",                            
-                            ) -> Dict[str, Any]:
+    def generate_html_content(
+        self,
+        document_dir: str,
+        course_id: str,
+        output_dir: str,
+        match_threshold: float = 0.7,
+        max_results: int = 5,
+        user_prompt: str = "",
+        teaching_pattern: Union[str, List[str]] = "",
+        skill_level: str = "",
+        topic_metadata: Dict[str, str] = None,
+        user_id: str = None,
+        allow_images: bool = False  
+    ) -> Dict[str, Any]:
         """
         Generate HTML content for all subtopics using RAG.
         
@@ -161,6 +162,7 @@ class RAGGenerationService:
             skill_level (str): User's skill level (1=beginner, 2=intermediate, 3=advanced)
             topic_metadata (Dict[str, str]): Mapping of topic names to their IDs
             user_id (str): ID of the user requesting the content
+            allow_images (bool): Whether to allow images in the content
             
         Returns:
             Dict[str, Any]: Dictionary containing generated files and their metadata
@@ -193,25 +195,17 @@ class RAGGenerationService:
                         safe_subtopic = self.sanitize_path(subtopic_code).replace(".", "_")
                         logger.info(f"Processing {safe_chapter}/{safe_subtopic}...")
 
-                        # Generate embedding and retrieve context
-                        query_text = f"Comprehensive technical explanation of {subtopic_name}"
-                        query_embedding = self.embedding_model.encode(query_text).tolist()
-
-                        context = self._retrieve_context(
-                            query_embedding, 
-                            course_id, 
-                            match_threshold, 
-                            max_results
-                        )
-
                         # Generate content with user preferences
-                        content = self._generate_content(
-                            subtopic_name, 
-                            subtopic_code, 
-                            context,
-                            skill_level,
-                            user_prompt,
-                            teaching_pattern
+                        content = self._generate_article_content(
+                            subtopic_name=subtopic_name,
+                            subtopic_code=subtopic_code,
+                            course_id=course_id,
+                            match_threshold=match_threshold,
+                            max_results=max_results,
+                            skill_level=skill_level,
+                            user_prompt=user_prompt,
+                            teaching_pattern=teaching_pattern,
+                            allow_images=allow_images  # Pass new parameter
                         )
                         
                         # Save content to file
@@ -239,7 +233,7 @@ class RAGGenerationService:
                                 "article_id": article_id,
                                 "article_name": f"{subtopic_name} - {subtopic_code}",
                                 "filepath": filepath,
-                                "topic_id": topic_metadata.get(subtopic_name)
+                                "topic_id": topic_metadata.get(subtopic_name) if topic_metadata else None
                             })
                             generated_files[filepath] = content
                             logger.info(f"Created and saved article: {filepath}")
@@ -303,87 +297,63 @@ class RAGGenerationService:
             logger.warning(f"Vector search failed: {str(e)}")
             return ""
 
-    def _generate_content(self, subtopic_name: str, subtopic_code: str, context: str, 
-                         skill_level: str = "", user_prompt: str = "", 
-                         teaching_pattern: Union[str, List[str]] = "") -> str:
+    def _generate_article_content(
+        self, 
+        subtopic_name: str,
+        subtopic_code: str,
+        course_id: str,
+        match_threshold: float = 0.7,
+        max_results: int = 5,
+        skill_level: str = "",
+        user_prompt: str = "",
+        teaching_pattern: Union[str, List[str]] = "",
+        allow_images: bool = False
+    ) -> str:
         """
-        Generate HTML content using Gemini model.
+        Generate HTML content for a single article.
         
         Args:
             subtopic_name (str): Name of the subtopic
             subtopic_code (str): Code of the subtopic
-            context (str): Retrieved context
+            course_id (str): ID of the course
+            match_threshold (float): Threshold for vector similarity matching
+            max_results (int): Maximum number of results to retrieve
             skill_level (str): User's skill level (1=beginner, 2=intermediate, 3=advanced)
             user_prompt (str): User's specific requirements for content
             teaching_pattern (Union[str, List[str]]): Preferred teaching pattern (e.g., case studies, stories)
+            allow_images (bool): Whether to allow images in the content
             
         Returns:
             str: Generated HTML content
         """
-        # Determine skill level description
-        skill_level_desc = ""
-        if skill_level == "1":
-            skill_level_desc = "beginner-friendly with basic concepts and simple explanations"
-        elif skill_level == "2":
-            skill_level_desc = "intermediate level with balanced theory and practical applications"
-        elif skill_level == "3":
-            skill_level_desc = "advanced level with complex concepts and in-depth technical details"
-        
-        # Build teaching pattern instructions
-        teaching_instructions = ""
-        if teaching_pattern:
-            # Handle both string and list types for teaching_pattern
-            if isinstance(teaching_pattern, list):
-                teaching_pattern_str = ', '.join(teaching_pattern)
-            else:
-                teaching_pattern_str = teaching_pattern
-                
-            if "case studies" in teaching_pattern_str.lower():
-                teaching_instructions += "- Include multiple real-world case studies\n"
-            if "stories" in teaching_pattern_str.lower():
-                teaching_instructions += "- Use storytelling approach to explain concepts\n"
-            if "examples" in teaching_pattern_str.lower():
-                teaching_instructions += "- Provide numerous practical examples\n"
-            if "visual" in teaching_pattern_str.lower():
-                teaching_instructions += "- Focus on visual explanations and diagrams\n"
-            if "hands-on" in teaching_pattern_str.lower():
-                teaching_instructions += "- Include hands-on exercises and tutorials\n"
-        
-        # If no specific teaching patterns were matched, use default
-        if not teaching_instructions:
-            teaching_instructions = "- Multiple practical examples\n- Real-world implementation scenarios\n"
-        
-        prompt = f"""Generate exhaustive HTML body content about {subtopic_name} ({subtopic_code}).
-        Use ALL available token capacity for depth and detail. The content should be {skill_level_desc}.
-        
-        Include:
-        
-        - Comprehensive definition section
-        - Detailed technical breakdown of components
-        {teaching_instructions}
-        - Common pitfalls and troubleshooting
-        - Advanced usage patterns
-        - Cross-references to related concepts
-        
-        {user_prompt}
-        
-        Context materials:
-        {context}
-        
-        Requirements:
-        - Strictly HTML body content only
-        - No CSS/JS/head/meta tags
-        - Semantic HTML5 elements
-        - Technical depth over brevity
-        - Tables for comparative analysis
-        - Code samples in <pre><code>
-        - DO NOT include any images in the generated content
-        - Use the full token capacity for maximum detail and comprehensiveness
-        """
+        try:
+            # Generate embedding and retrieve context
+            query_text = f"Comprehensive technical explanation of {subtopic_name}"
+            query_embedding = self.embedding_model.encode(query_text).tolist()
+            context = self._retrieve_context(
+                query_embedding=query_embedding,
+                course_id=course_id,
+                match_threshold=match_threshold,
+                max_results=max_results
+            )
 
-        response = self.gemini_model.generate_content(prompt)
-        return self._clean_html_content(response.text)
+            # Build unified prompt
+            prompt = self._build_generation_prompt(
+                subtopic_name=subtopic_name,
+                subtopic_code=subtopic_code,
+                context=context,
+                skill_level=skill_level,
+                user_prompt=user_prompt,
+                teaching_pattern=teaching_pattern,
+                allow_images=allow_images
+            )
 
+            response = self.gemini_model.generate_content(prompt)
+            return self._clean_html_content(response.text)
+            
+        except Exception as e:
+            logger.error(f"Failed to generate content: {str(e)}")
+            return f"<p>Error generating content: {str(e)}</p>"
     def process_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
         Process both text and image content for a course and generate HTML articles.
@@ -628,7 +598,12 @@ class RAGGenerationService:
             logger.error(f"Supabase insert error: {e}")
             return False
 
-    def _generate_articles(self, base_path: str, course_id: str, output_dir: str) -> Dict[str, Any]:
+    def _generate_articles(
+        self,
+        base_path: str,
+        course_id: str,
+        output_dir: str
+    ) -> Dict[str, Any]:        
         """
         Generate HTML articles from processed content.
         
@@ -663,11 +638,12 @@ class RAGGenerationService:
                     # Process each subtopic
                     for subtopic_code, subtopic_name in chapter_data.items():
                         try:
-                            # Generate article content
+                            # Generate article content using the unified method
                             article_content = self._generate_article_content(
                                 subtopic_name=subtopic_name,
                                 subtopic_code=subtopic_code,
-                                course_id=course_id
+                                course_id=course_id,
+                                allow_images=False  # Enable images for batch
                             )
                             
                             # Save article
@@ -698,58 +674,6 @@ class RAGGenerationService:
                 "generated": 0,
                 "errors": [str(e)]
             }
-
-    def _generate_article_content(self, subtopic_name: str, subtopic_code: str, course_id: str) -> str:
-        """
-        Generate HTML content for a single article.
-        
-        Args:
-            subtopic_name (str): Name of the subtopic
-            subtopic_code (str): Code of the subtopic
-            course_id (str): ID of the course
-            
-        Returns:
-            str: Generated HTML content
-        """
-        try:
-            # Generate embedding for the subtopic
-            query_text = f"Comprehensive technical explanation of {subtopic_name}"
-            query_embedding = self.embedding_model.encode(query_text).tolist()
-            
-            # Retrieve relevant context
-            context = self._retrieve_context(
-                query_embedding=query_embedding,
-                course_id=course_id,
-                match_threshold=0.7,
-                max_results=5
-            )
-            
-            # Generate content using Gemini
-            prompt = f"""Generate a comprehensive HTML article about {subtopic_name} ({subtopic_code}).
-            Include:
-            
-            - Detailed explanation
-            - Technical concepts
-            - Examples
-            - Implementation details
-            - Best practices
-            
-            Context materials:
-            {context}
-            
-            Requirements:
-            - Use semantic HTML5
-            - Include code samples in <pre><code>
-            - Use tables for comparisons
-            - Include relevant images
-            """
-            
-            response = self.gemini_model.generate_content(prompt)
-            return response.text
-            
-        except Exception as e:
-            logger.error(f"Failed to generate article content for {subtopic_code}: {str(e)}")
-            raise 
 
     def _save_article_to_supabase(self, 
                                  course_id: str,
@@ -819,7 +743,7 @@ class RAGGenerationService:
                 return None
                 
             # Update topic's articles_json
-            self._update_topic_articles(topic_id, article_id)
+            # self._update_topic_articles(topic_id, article_id)
             
             logger.info(f"Article saved successfully with ID: {article_id}")
             return article_id
@@ -830,7 +754,7 @@ class RAGGenerationService:
             
     def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
         """
-        Update topic's articles_json field with new article ID.
+        Update topic's articles_json field with new article ID using atomic update.
         
         Args:
             topic_id (str): ID of the topic
@@ -840,48 +764,33 @@ class RAGGenerationService:
             bool: True if successful, False otherwise
         """
         try:
-            # First get current articles_json
-            response = self.supabase_client.table("topics").select("articles_json").eq("topic_id", topic_id).execute()
+            # Use PostgreSQL's jsonb_array_append function
+            update_query = """
+            UPDATE topics 
+            SET articles_json = 
+                COALESCE(articles_json, '[]'::jsonb) || jsonb_build_array(%(article_id)s)
+            WHERE topic_id = %(topic_id)s
+            """
             
-            if not response.data:
-                logger.error(f"Topic not found: {topic_id}")
-                return False
+            # Execute raw SQL
+            response = self.supabase_client.rpc('execute', {
+                "query": update_query,
+                "params": {
+                    "article_id": article_id,
+                    "topic_id": topic_id
+                }
+            }).execute()
             
-            # Handle the articles_json array
-            current_articles = response.data[0].get('articles_json', [])
-            if current_articles is None:
-                current_articles = []
-            elif isinstance(current_articles, str):
-                try:
-                    current_articles = json.loads(current_articles)
-                except:
-                    current_articles = []
-            
-            if not isinstance(current_articles, list):
-                current_articles = []
-            
-            # Add new article ID if not already present
-            if article_id not in current_articles:
-                current_articles.append(article_id)
-            
-            # Convert to JSON string if needed
-            articles_json = json.dumps(current_articles) if isinstance(current_articles, list) else "[]"
-            
-            # Update topic with the new array
-            update_response = self.supabase_client.table("topics").update({
-                "articles_json": articles_json
-            }).eq("topic_id", topic_id).execute()
-            
-            if update_response.data:
+            # Check affected rows
+            if response.data and response.data[0]['affected_rows'] > 0:
                 logger.info(f"Updated topic {topic_id} with article {article_id}")
-                logger.info(f"Current articles: {articles_json}")
                 return True
-            else:
-                logger.error(f"Failed to update topic {topic_id}")
-                return False
-                
+            
+            logger.error(f"No rows affected for topic {topic_id}")
+            return False
+            
         except Exception as e:
-            logger.error(f"Error updating topic articles: {str(e)}")
+            logger.error(f"Topic update error: {str(e)}")
             return False
 
     def _clean_html_content(self, content: str) -> str:
@@ -905,3 +814,128 @@ class RAGGenerationService:
         content = content.strip()
         
         return content 
+    
+
+    def _get_skill_description(self, level: str) -> str:
+        """Convert skill level to descriptive text."""
+        return {
+            "1": "beginner-friendly with basic concepts and simple explanations",
+            "2": "intermediate level with balanced theory and practical applications",
+            "3": "advanced level with complex concepts and in-depth technical details",
+            "": ""  # Default empty
+        }.get(level, "")
+
+    def _build_teaching_instructions(self, pattern: Union[str, List[str]]) -> str:
+        """Convert teaching pattern to prompt instructions."""
+        instructions = []
+        if isinstance(pattern, list):
+            pattern_str = ', '.join(pattern)
+        else:
+            pattern_str = str(pattern)
+
+        patterns = {
+            "case studies": "- Include multiple real-world case studies\n",
+            "stories": "- Use storytelling approach to explain concepts\n",
+            "examples": "- Provide numerous practical examples\n",
+            "visual": "- Focus on visual explanations and diagrams\n",
+            "hands-on": "- Include hands-on exercises and tutorials\n"
+        }
+
+        for key, instruction in patterns.items():
+            if key in pattern_str.lower():
+                instructions.append(instruction)
+
+        return "".join(instructions) if instructions else \
+            "- Multiple practical examples\n- Real-world implementation scenarios\n"
+            
+            
+    def _build_generation_prompt(
+        self,
+        subtopic_name: str,
+        subtopic_code: str,
+        context: str,
+        skill_level: str = "",
+        user_prompt: str = "",
+        teaching_pattern: Union[str, List[str]] = "",
+        allow_images: bool = False
+    ) -> str:
+        """Build generation prompt with conditional sections.
+        Args:
+            subtopic_name (str): Name of the subtopic
+            subtopic_code (str): Code of the subtopic
+            context (str): Context of the subtopic
+            skill_level (str): Skill level of the user
+            user_prompt (str): User prompt
+            teaching_pattern (Union[str, List[str]]): Teaching pattern
+            allow_images (bool): Whether to allow images in the content
+            
+        Returns:
+            str: Generation prompt
+        """
+         # Skill level description
+        skill_desc = self._get_skill_description(skill_level)
+        skill_section = f"**Target Audience**: {skill_desc}." if skill_desc else ""
+
+        # Teaching instructions
+        teaching_instructions = self._build_teaching_instructions(teaching_pattern)
+
+        # Image policy
+        image_policy = ("- STRICTLY NO IMAGES ALLOWED" if not allow_images 
+                        else "- Include relevant <figure> elements with proper <figcaption>")
+
+        return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
+        Use 100% of available token capacity for maximum depth and quality. {skill_section}
+
+        **Mandatory Structure:**
+        1. <h1>Single Title</h1> (Only one H1 heading at beginning)
+        2. Table of Contents (Linked to section IDs)
+        3. Comprehensive Definition Section with Etymology
+        4. Technical Deep Dive with Mathematical Notation (if applicable)
+        5. Implementation Examples:
+        - Minimum 3 code samples in <pre><code> blocks
+        - Error handling examples
+        6. Comparative Analysis Table:
+        <table class="comparative">
+            <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
+            <tbody>...</tbody>
+        </table>
+        7. Best Practices & Anti-Patterns
+        8. Security Considerations
+        9. Performance Characteristics
+        10. Cross-References to Related Concepts
+
+        **Context Materials:**
+        {context}
+
+        **Quality Requirements:**
+        - PhD-level technical depth prioritized
+        - All claims must be backed by context or examples
+        - No filler content - maximize information density
+        - Strict technical accuracy over readability
+        - Include industry-specific terminology
+        - No token preservation - use full capacity
+
+        **HTML Requirements:**
+        - Only <body> content allowed (no head/styles)
+        - Semantic HTML5 elements required (article, section, etc.)
+        - Tables must use proper <thead>/<tbody> structure
+        - Code samples require syntax highlighting hints and must have word wrapping to fit display
+        - External links open in new tab
+        - All sections must have ID attributes
+        - No markdown - only pure HTML
+        - Error handling examples in red bordered divs
+
+        **Special Instructions:**
+        {teaching_instructions}
+        {image_policy}
+        {user_prompt}
+
+        **Prohibitions:**
+        - No "Note:" or "Tip:" boxes
+        - No colloquial language
+        - No placeholder comments
+        - No unfinished sections
+        - No markdown formatting
+        - No duplicated content
+
+        Output MUST use 100% of available tokens while maintaining technical precision."""

@@ -248,4 +248,31 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"Error getting course summary: {str(e)}")
         return {}
+
+def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
+    """
+    Get all articles for a given course.
+    
+    Args:
+        course_id (str): The ID of the course
+        
+    Returns:
+        List[Dict[str, Any]]: A list of articles for the given course
+    """
+    try:
+        supabase: Client = create_client("https://mouwhbulaoghvsxbvmwj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdXdoYnVsYW9naHZzeGJ2bXdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0NjI1NzQsImV4cCI6MjA1NjAzODU3NH0.52PcqiCjO8L1VU1lY7t01VLVSD_Cvz0OQFuPfT7lJ2w")
+        
+        #articles doesn't have column for course_id it has metadata json with course_id so see in the metadata_json for article_id
+        articles_response = supabase.table('articles')\
+            .select('*')\
+            .eq('tags->>course_id', course_id)\
+            .execute()
+        
+        if not articles_response.data:
+            return []
+        
+        return articles_response.data
+    except Exception as e:
+        logger.error(f"Error getting course articles: {str(e)}")
+        return []
     

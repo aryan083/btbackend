@@ -28,7 +28,7 @@ rag_service = RAGGenerationService(
     gemini_api_key=Config.GEMINI_API_KEY
 )
 
-@rag_generation_bp.route('/generate', methods=['POST'])
+# @rag_generation_bp.route('/generate', methods=['POST'])
 def generate_content():
     try:
         data = request.get_json()
@@ -83,7 +83,7 @@ def generate_content():
             "details": str(e)
         }), 500
 
-@rag_generation_bp.route('/process', methods=['POST'])
+# @rag_generation_bp.route('/process', methods=['POST'])
 def process_content() -> tuple[Dict[str, Any], int]:
     """
     Process course content (text and images) for RAG generation.
@@ -145,12 +145,13 @@ def process_content() -> tuple[Dict[str, Any], int]:
             "details": str(e)
         }), 500
 
-def process_article_images(article_ids: List[Dict[str, Any]]) -> Dict[str, Any]:
+def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) -> Dict[str, Any]:
     """
     Process article IDs and attach images to them using the unsplash_api_fetcher function.
     
     Args:
-        article_ids (List[Dict[str, Any]]): List of article data including article_id
+        article_ids (List[Dict[str, Any]]): List of article data including article_id and content_text
+        course_id (str): ID of the course these articles belong to
         
     Returns:
         Dict[str, Any]: Results of image processing
@@ -160,24 +161,21 @@ def process_article_images(article_ids: List[Dict[str, Any]]) -> Dict[str, Any]:
         "failed": 0,
         "errors": []
     }
-    
-    for article in article_ids:
-        try:
-            article_id = article.get("article_id")
-            if not article_id:
-                logger.warning(f"Missing article_id in article data: {article}")
-                results["failed"] += 1
-                continue
-                
-            logger.info(f"Processing image for article ID: {article_id}")
-            unsplash_api_fetcher(article_id)
-            results["processed"] += 1
-            
-        except Exception as e:
-            error_msg = f"Failed to process image for article {article.get('article_id', 'unknown')}: {str(e)}"
-            logger.error(error_msg)
-            results["errors"].append(error_msg)
-            results["failed"] += 1
+
+    try:
+        # Use the unsplash_api_fetcher to process all articles for this course
+        logger.info(f"Processing images for course ID: {course_id}")
+        unsplash_api_fetcher(course_id=course_id)
+        
+        # Since unsplash_api_fetcher processes all articles for the course,
+        # we'll consider all articles as processed
+        results["processed"] = len(article_ids)
+        
+    except Exception as e:
+        error_msg = f"Failed to process images for course {course_id}: {str(e)}"
+        logger.error(error_msg)
+        results["errors"].append(error_msg)
+        results["failed"] = len(article_ids)
     
     return results
 
@@ -245,7 +243,8 @@ def upload_and_process_pdf():
             
         # Process the document
         result = service.process_document(
-            extract_images=request.form.get('extract_images', 'true').lower() == 'true',
+            # extract_images=request.form.get('extract_images', 'true').lower() == 'true',
+            extract_images=False,
             extract_text=request.form.get('extract_text', 'true').lower() == 'true',
             save_json=request.form.get('save_json', 'true').lower() == 'true'
         )
@@ -260,14 +259,15 @@ def upload_and_process_pdf():
 
                 # Generate HTML content with all necessary parameters
                 generated_result = rag_service.generate_html_content(
-                    document_dir=str(document_dir),
-                    course_id=course_id,
-                    output_dir=str(document_dir / 'generated'),
-                    user_prompt=user_prompt,
-                    teaching_pattern=teaching_pattern,
-                    skill_level=skill_level,
-                    topic_metadata=topic_metadata,
-                    user_id=user_id
+                document_dir=str(document_dir),
+                course_id=course_id,
+                output_dir=str(document_dir / 'generated'),
+                user_prompt=user_prompt,
+                teaching_pattern=teaching_pattern,
+                skill_level=skill_level,
+                topic_metadata=topic_metadata,
+                user_id=user_id,
+                allow_images=False 
                 )
                 
                 # Extract article generation results
@@ -284,7 +284,7 @@ def upload_and_process_pdf():
                 image_results = {}
                 if generated_articles:
                     logger.info(f"Processing images for {len(generated_articles)} articles")
-                    image_results = process_article_images(generated_articles)
+                    image_results = process_article_images(generated_articles, course_id)
                     logger.info(f"Image processing results: {image_results}")
                 
                 return jsonify({

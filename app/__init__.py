@@ -5,27 +5,12 @@ Sets up Flask app with all necessary configurations and extensions.
 from flask import Flask
 from flask_cors import CORS
 from pathlib import Path
-import logging
-from pythonjsonlogger import jsonlogger
 import os
 from dotenv import load_dotenv
 import sys
-
+import logging
 # Load environment variables
 load_dotenv()
-
-def setup_logging():
-    """
-    Set up JSON logging configuration
-    @returns: None
-    """
-    log_handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
-        '%(asctime)s %(levelname)s %(name)s %(message)s'
-    )
-    log_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(log_handler)
-    logging.getLogger().setLevel(logging.INFO)
 
 def create_app(config_name=None):
     """
@@ -37,9 +22,6 @@ def create_app(config_name=None):
     
     # Enable CORS
     CORS(app)
-    
-    # Setup logging
-    setup_logging()
     
     # Ensure upload directory exists
     upload_dir = Path(app.root_path) / 'static' / 'uploads'

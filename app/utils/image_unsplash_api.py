@@ -6,34 +6,12 @@ import google.generativeai as genai
 from requests.auth import HTTPBasicAuth
 from app.config import Config
 import logging
-import colorlog
 
-# Set up colored logging
-def setup_module_logging():
-    """Configure colored logging for the module"""
-    logger = logging.getLogger(__name__)
-    
-    # Only add handler if logger doesn't have handlers
-    if not logger.handlers:
-        handler = colorlog.StreamHandler()
-        handler.setFormatter(colorlog.ColoredFormatter(
-            "%(log_color)s%(asctime)s - %(name)s - %(levelname)s - %(message)s%(reset)s",
-            datefmt="%Y-%m-%d %H:%M:%S",
-            log_colors={
-                'DEBUG':    'cyan',
-                'INFO':     'green',
-                'WARNING':  'yellow',
-                'ERROR':    'red',
-                'CRITICAL': 'red,bg_white',
-            }
-        ))
-        logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
-    
-    return logger
+from app.utils.course_utils import get_course_articles
 
-# Initialize logger
-logger = setup_module_logging()
+# Initialize logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def init_gemini():
     """
@@ -76,39 +54,39 @@ def init_supabase():
         logger.error(f"Failed to initialize Supabase: {str(e)}")
         raise
 
-def get_article_content(supabase, article_id):
-    """
-    Retrieve article content from Supabase
+# def get_article_content(supabase, article_id):
+#     """
+#     Retrieve article content from Supabase
     
-    Args:
-        supabase (Client): Supabase client instance
-        article_id (str): ID of the article to retrieve
+#     Args:
+#         supabase (Client): Supabase client instance
+#         article_id (str): ID of the article to retrieve
         
-    Returns:
-        str: Article content or empty string if not found
-    """
-    try:
-        if not article_id:
-            raise ValueError("Article ID is required")
+#     Returns:
+#         str: Article content or empty string if not found
+#     """
+#     try:
+#         if not article_id:
+#             raise ValueError("Article ID is required")
             
-        response = (supabase.table("articles")
-            .select("*")
-            .eq("article_id", article_id)
-            .execute())
+#         response = (supabase.table("articles")
+#             .select("*")
+#             .eq("article_id", article_id)
+#             .execute())
         
-        if not response.data:
-            logger.warning(f"No article found with ID: {article_id}")
-            return ""
+#         if not response.data:
+#             logger.warning(f"No article found with ID: {article_id}")
+#             return ""
             
-        article_content = response.data[0].get('content_text', '')
-        if not article_content:
-            logger.warning(f"Article {article_id} has no content")
+#         article_content = response.data[0].get('content_text', '')
+#         if not article_content:
+#             logger.warning(f"Article {article_id} has no content")
             
-        return article_content
+#         return article_content
         
-    except Exception as e:
-        logger.error(f"Error getting article content: {str(e)}")
-        raise
+#     except Exception as e:
+#         logger.error(f"Error getting article content: {str(e)}")
+#         raise
 
 def get_image_query(client, article_content):
     """
@@ -173,65 +151,70 @@ def query_unsplash(query, num_images=1):
         logger.error(f"Unsplash API error: {str(e)}")
         raise
 
-def search_pexels(query):
-    """
-    Search for images on Pexels
+# def search_pexels(query):
+#     """
+#     Search for images on Pexels
     
-    Args:
-        query (str): Search query
+#     Args:
+#         query (str): Search query
         
-    Returns:
-        str: URL of the matching image
-    """
-    try:
-        if not Config.PEXELS_API_KEY:
-            raise ValueError("Pexels API key is missing")
+#     Returns:
+#         str: URL of the matching image
+#     """
+#     try:
+#         if not Config.PEXELS_API_KEY:
+#             logger.warning("Pexels API key is missing")
+#             return ""
             
-        url = "https://api.pexels.com/v1/search"
-        headers = {"Authorization": Config.PEXELS_API_KEY}
-        params = {"query": query, "per_page": 1}
+#         url = "https://api.pexels.com/v1/search"
+#         headers = {"Authorization": Config.PEXELS_API_KEY}
+#         params = {"query": query, "per_page": 1}
         
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
+#         response = requests.get(url, headers=headers, params=params)
         
-        data = response.json()
-        if not data.get("photos"):
-            logger.warning(f"No Pexels images found for query: {query}")
-            return ""
+#         # Check if the request was successful
+#         if response.status_code != 200:
+#             logger.warning(f"Pexels API returned status code {response.status_code}")
+#             return ""
             
-        return data["photos"][0]["src"]["original"]
+#         data = response.json()
+#         if not data.get("photos"):
+#             logger.warning(f"No Pexels images found for query: {query}")
+#             return ""
+            
+#         return data["photos"][0]["src"]["original"]
         
-    except Exception as e:
-        logger.error(f"Pexels API error: {str(e)}")
-        raise
+#     except Exception as e:
+#         logger.warning(f"Pexels API error: {str(e)}")
+#         return ""
 
-def get_best_image(client, image_links, article_content):
-    """
-    Determine the best matching image for the article
+# def get_best_image(client, image_links, article_content):
+#     """
+#     Determine the best matching image for the article
     
-    Args:
-        client: Gemini AI client
-        image_links (list): List of image URLs to compare
-        article_content (str): Article content to match against
+#     Args:
+#         client: Gemini AI client
+#         image_links (list): List of image URLs to compare
+#         article_content (str): Article content to match against
         
-    Returns:
-        str: Index of the best matching image
-    """
-    try:
-        if not image_links or len(image_links) < 2:
-            return "0"
+#     Returns:
+#         str: Index of the best matching image
+#     """
+#     try:
+#         if not image_links or len(image_links) < 2:
+#             return "0"
             
-        prompt = """You are given two image URLs and one HTML article or text passage. 
-        Analyze the content of the article and determine which image is the most contextually and semantically relevant to the article. 
-        Return "0" if the first image is the best match, "1" if the second image is the best match. 
-        Return only the number as a string — "0" or "1" — with no additional text or explanation."""
+#         prompt = """You are given two image URLs and one HTML article or text passage. 
+#         Analyze the content of the article and determine which image is the most contextually and semantically relevant to the article. 
+#         Return "0" if the first image is the best match, "1" if the second image is the best match. 
+#         Return only the number as a string — "0" or "1" — with no additional text or explanation."""
         
-        response = client.generate_content([prompt, article_content, image_links[0], image_links[1]])
-        return response.text.strip()
+#         response = client.generate_content([prompt, article_content, image_links[0], image_links[1]])
+#         return response.text.strip()
         
-    except Exception as e:
-        logger.error(f"Error determining best image: {str(e)}")
-        return "0"  # Default to first image on error
+#     except Exception as e:
+#         logger.error(f"Error determining best image: {str(e)}")
+#         return "0"  # Default to first image on error
 
 def append_link_in_supabase(supabase, article_id, image_url):
     """
@@ -259,104 +242,151 @@ def append_link_in_supabase(supabase, article_id, image_url):
     except Exception as e:
         logger.error(f"Failed to update article in Supabase: {str(e)}")
         raise
-
-def unsplash_api_fetcher(article_id):
+    
+def unsplash_api_fetcher(course_id: str):
     """
-    Main function to fetch and attach images to articles
+    Main function to fetch and attach images to articles using existing data
     
     Args:
-        article_id (str): ID of the article to process
+        course_id (str): ID of the course to process 
     """
+    # Set up logging first
+    
     try:
         # Initialize clients
         supabase = init_supabase()
         client = init_gemini()
-        
-        # Get article content
-        article_content = get_article_content(supabase, article_id)
-        if not article_content:
-            raise ValueError(f"No content found for article {article_id}")
-        
-        # Generate image search query
-        query = get_image_query(client, article_content)
-        logger.info(f"Generated image query: {query}")
-        
-        # Get images from different sources
-        image_links = []
-        
-        # Get Unsplash image
-        unsplash_link = query_unsplash(query)
-        if unsplash_link:
-            image_links.append(unsplash_link)
-            
-        # Get Pexels image
-        pexels_link = search_pexels(query)
-        if pexels_link:
-            image_links.append(pexels_link)
-            
-        if not image_links:
-            raise ValueError("No images found from any source")
-            
-        # Determine best image
-        index = get_best_image(client, image_links, article_content)
-        selected_image = image_links[int(index)]
-        
-        # Update article with selected image
-        append_link_in_supabase(supabase, article_id, selected_image)
-        logger.info(f"Successfully processed article {article_id}")
-        
+        # Get all articles for the course in a single query
+        response = get_course_articles(course_id)
+
+        if not response:
+            logger.warning(f"No articles found for course {course_id}")
+            return
+
+        # Process articles in batch
+        success_count = 0
+        for article in response:
+            article_id = None  # Ensure article_id is defined
+            try:
+                # Unpack tuple if necessary
+                if isinstance(article, tuple):
+                    article = dict(article)
+
+                article_id = article.get('article_id')
+                content = article.get('content_text', '')
+                
+                if not content:
+                    logger.warning(f"Skipping empty content for {article_id}")
+                    continue
+
+                # Generate and apply image
+                query = get_image_query(client, content)
+                if unsplash_link := query_unsplash(query):
+                    append_link_in_supabase(supabase, article_id, unsplash_link)
+                    success_count += 1
+                    logger.info(f"Updated {article_id}")
+
+            except Exception as e:
+                logger.error(f"Failed article {article_id}: {str(e)}")
+                continue
+
+        logger.info(f"Processed {len(response)} articles | {success_count} successes")
+
     except Exception as e:
-        logger.error(f"Failed to process article {article_id}: {str(e)}")
+        logger.error(f"Course processing failed: {str(e)}")
         raise
 
-
-def search_image(query):
-    # Your Shutterstock API credentials
-    api_key = Config.SHUTTERSTOCK_API_KEY
-    api_secret = Config.SHUTTERSTOCK_API_SECRET
+# def unsplash_api_fetcher(article_id):
+#     """
+#     Main function to fetch and attach images to articles
     
-    # Get access token
-    token_url = 'https://api.shutterstock.com/v2/oauth/access_token'
-    token_data = {
-        'grant_type': 'client_credentials',
-        'client_id': api_key,
-        'client_secret': api_secret
-    }
-    token_response = requests.post(token_url, data=token_data)
-    token_response.raise_for_status()
-    access_token = token_response.json().get('access_token')
-
-    # Search for images
-    search_url = 'https://api.shutterstock.com/v2/images/search'
-    headers = {'Authorization': f'Bearer {access_token}'}
-    params = {'query': query, 'per_page': 1}
-    search_response = requests.get(search_url, headers=headers, params=params)
-    search_response.raise_for_status()
-    data = search_response.json()
-
-    if data['data']:
-        # print(data)
-        return data['data'][0]['assets']['huge_thumb']['url']
-    else:
-        return 'No images found.'
-
-
-
-
-
-
-
-
-
-
-
-    
+#     Args:
+#         article_id (str): ID of the article to process
+#     """
+#     try:
+#         # Initialize clients
+#         supabase = init_supabase()
+#         client = init_gemini()
         
+#         # Get article content
+#         article_content = get_article_content(supabase, article_id)
+#         if not article_content:
+#             logger.warning(f"No content found for article {article_id}")
+#             return
+        
+#         # Generate image search query
+#         query = get_image_query(client, article_content)
+#         logger.info(f"Generated image query: {query}")
+        
+#         # Get images from different sources
+#         image_links = []
+        
+#         # Get Unsplash image
+#         unsplash_link = query_unsplash(query)
+#         if unsplash_link:
+#             image_links.append(unsplash_link)
+#             logger.info(f"Found Unsplash image for article {article_id}")
+            
+#         # Get Pexels image
+#         # pexels_link = search_pexels(query)
+#         # if pexels_link:
+#         #     image_links.append(pexels_link)
+#         #     logger.info(f"Found Pexels image for article {article_id}")
+            
+#         if not image_links:
+#             logger.warning(f"No images found for article {article_id}")
+#             return
+            
+#         # If we only have one image, use it directly
+#         if len(image_links) == 1:
+#             append_link_in_supabase(supabase, article_id, image_links[0])
+#             logger.info(f"Successfully processed article {article_id} with single image")
+#             return
+            
+#         # Determine best image
+#         # index = get_best_image(client, image_links, article_content)
+#         # selected_image = image_links[int(index)]
+        
+#         # # Update article with selected image
+#         # append_link_in_supabase(supabase, article_id, selected_image)
+#         # logger.info(f"Successfully processed article {article_id}")
+        
+#     except Exception as e:
+#         logger.error(f"Failed to process article {article_id}: {str(e)}")
+#         # Don't raise the exception to prevent the entire process from failing
 
 
+# def search_image(query):
+#     # Your Shutterstock API credentials
+#     api_key = Config.SHUTTERSTOCK_API_KEY
+#     api_secret = Config.SHUTTERSTOCK_API_SECRET
+    
+#     # Get access token
+#     token_url = 'https://api.shutterstock.com/v2/oauth/access_token'
+#     token_data = {
+#         'grant_type': 'client_credentials',
+#         'client_id': api_key,
+#         'client_secret': api_secret
+#     }
+#     token_response = requests.post(token_url, data=token_data)
+#     token_response.raise_for_status()
+#     access_token = token_response.json().get('access_token')
+
+#     # Search for images
+#     search_url = 'https://api.shutterstock.com/v2/images/search'
+#     headers = {'Authorization': f'Bearer {access_token}'}
+#     params = {'query': query, 'per_page': 1}
+#     search_response = requests.get(search_url, headers=headers, params=params)
+#     search_response.raise_for_status()
+#     data = search_response.json()
+
+#     if data['data']:
+#         # print(data)
+#         return data['data'][0]['assets']['huge_thumb']['url']
+#     else:
+#         return 'No images found.'
 
 
-
-
-
-
+if __name__ == "__main__":
+    unsplash_api_fetcher("b6f57120-039a-464c-94b2-9a4533cc811a")
+    
