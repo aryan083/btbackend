@@ -726,7 +726,7 @@ class RAGGenerationService:
                 },
                 "content_text": cleaned_content,
                 "topic_id": topic_id,
-                "is_completed": True,
+                "is_completed": False,
                 "user_id": user_id if user_id else None
             }
             
