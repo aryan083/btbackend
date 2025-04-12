@@ -5,6 +5,7 @@ from typing import Dict, List, Any, Optional, TypedDict
 from datetime import datetime
 from supabase import create_client, Client
 from app.config import Config
+from run import custom_logger
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,7 @@ class CourseGenerationData(TypedDict):
     topic_name_to_id: Dict[str, str]
 
 
+@custom_logger.log_function_call
 def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseGenerationData]:
     """
     Get minimal course data needed for content generation with flat topic mapping.
@@ -48,7 +50,8 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
     """
     try:
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
+        import time 
+        time.sleep(10)
         # Verify user access
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -104,6 +107,7 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
         logger.error(f"Error getting course generation data: {str(e)}")
         return None
 
+@custom_logger.log_function_call
 def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDetailedData]:
     """
     Get detailed course data including all chapters, topics, and course metadata.
@@ -132,7 +136,8 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
     try:
         # Initialize Supabase client
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
+        import time 
+        time.sleep(10)
         # First, verify user has access to this course
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -212,6 +217,7 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
         logger.error(f"Error getting detailed course data: {str(e)}")
         return None
 
+@custom_logger.log_function_call
 def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
     """
     Get a summary of course data without detailed chapter and topic information.
@@ -225,7 +231,8 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
     """
     try:
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
+        import time 
+        time.sleep(10)
         # Get course data
         course_response = supabase.table('courses')\
             .select('course_name, skill_level, teaching_pattern, user_prompt, created_at')\
@@ -249,6 +256,7 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
         logger.error(f"Error getting course summary: {str(e)}")
         return {}
 
+@custom_logger.log_function_call
 def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
     """
     Get all articles for a given course.
@@ -261,7 +269,8 @@ def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
     """
     try:
         supabase: Client = create_client("https://mouwhbulaoghvsxbvmwj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdXdoYnVsYW9naHZzeGJ2bXdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0NjI1NzQsImV4cCI6MjA1NjAzODU3NH0.52PcqiCjO8L1VU1lY7t01VLVSD_Cvz0OQFuPfT7lJ2w")
-        
+        import time 
+        time.sleep(10)
         #articles doesn't have column for course_id it has metadata json with course_id so see in the metadata_json for article_id
         articles_response = supabase.table('articles')\
             .select('*')\

@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 from app.services.pdf_processor import PDFParser as DocumentService
 from app.utils.course_utils import get_course_detailed_data, get_course_summary,get_course_generation_data
 from app.utils.image_unsplash_api import unsplash_api_fetcher
-
+from run import custom_logger
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -29,6 +29,7 @@ rag_service = RAGGenerationService(
 )
 
 # @rag_generation_bp.route('/generate', methods=['POST'])
+@custom_logger.log_function_call
 def generate_content():
     try:
         data = request.get_json()
@@ -84,6 +85,7 @@ def generate_content():
         }), 500
 
 # @rag_generation_bp.route('/process', methods=['POST'])
+@custom_logger.log_function_call
 def process_content() -> tuple[Dict[str, Any], int]:
     """
     Process course content (text and images) for RAG generation.
@@ -145,6 +147,7 @@ def process_content() -> tuple[Dict[str, Any], int]:
             "details": str(e)
         }), 500
 
+@custom_logger.log_function_call
 def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) -> Dict[str, Any]:
     """
     Process article IDs and attach images to them using the unsplash_api_fetcher function.
@@ -180,6 +183,7 @@ def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) ->
     return results
 
 @rag_generation_bp.route('/upload_and_process2', methods=['POST'])
+@custom_logger.log_function_call
 def upload_and_process_pdf():
     try:
         # Get required parameters
@@ -338,7 +342,7 @@ def upload_and_process_pdf():
             'message': error_msg,
             'error_code': 'PROCESSING_FAILED'
         }), 500
-
+@custom_logger.log_function_call
 @rag_generation_bp.errorhandler(HTTPException)
 def handle_http_exception(e: HTTPException) -> tuple[Dict[str, Any], int]:
     """

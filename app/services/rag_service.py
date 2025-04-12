@@ -13,7 +13,7 @@ from unstructured.partition.pdf import partition_pdf
 from datetime import datetime
 from config import Config
 import re
-
+from run import custom_logger
 # Set up colored logging
 handler = colorlog.StreamHandler()
 handler.setFormatter(colorlog.ColoredFormatter(
@@ -26,7 +26,7 @@ logger.setLevel(logging.INFO)
 
 class DocumentService:
     """High-level service for document processing operations"""
-    
+    @custom_logger.log_function_call
     def __init__(self, output_base_dir: str):
         """Initialize the document service
         
@@ -35,7 +35,7 @@ class DocumentService:
         """
         self.output_base_dir = Path(output_base_dir)
         self.output_base_dir.mkdir(parents=True, exist_ok=True)
-        
+    @custom_logger.log_function_call
     def process_document(self, pdf_file_path: str, extract_images: bool = True,
                         extract_text: bool = True, save_json: bool = True) -> Dict[str, Any]:
         """Process a PDF document and extract its content
@@ -84,7 +84,7 @@ class DocumentService:
 
 class PDFParser:
     """Enhanced PDF parser for text and image extraction"""
-
+    @custom_logger.log_function_call
     def __init__(self, pdf_path: str, output_base_dir: str):
         """
         Initialize the PDF parser
@@ -111,6 +111,7 @@ class PDFParser:
             logger.error(f"Failed to open PDF: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
     def _process_toc(self) -> List[Dict[str, Any]]:
         """
         Process table of contents into chapter structure
@@ -136,7 +137,7 @@ class PDFParser:
             })
         
         return chapters
-
+    @custom_logger.log_function_call
     def _extract_metadata(self) -> Dict[str, Any]:
         """
         Extract metadata from PDF document
@@ -155,7 +156,7 @@ class PDFParser:
         except Exception as e:
             logger.error(f"Metadata extraction failed: {str(e)}")
             raise
-
+    @custom_logger.log_function_call
     def _parse_date(self, pdf_date: Optional[str]) -> Optional[str]:
         """
         Parse PDF date format to ISO-8601
@@ -169,7 +170,7 @@ class PDFParser:
             except Exception:
                 return None
         return None
-
+    @custom_logger.log_function_call
     def _extract_images(self) -> List[Dict[str, Any]]:
         """
         Extract images from PDF pages
@@ -224,7 +225,7 @@ class PDFParser:
             raise
             
         return images
-
+    @custom_logger.log_function_call
     def _chunk_text(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
         """
         Split text into smaller chunks with overlap
@@ -260,7 +261,7 @@ class PDFParser:
             start = max(end - overlap, 0)
             
         return chunks
-
+    @custom_logger.log_function_call
     def _extract_text_with_unstructured(self) -> List[Dict[str, Any]]:
         """
         Extract text from PDF pages using unstructured
@@ -306,7 +307,7 @@ class PDFParser:
         except Exception as e:
             logger.error(f"Text extraction failed: {str(e)}")
             raise
-
+    @custom_logger.log_function_call
     def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
                         text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -397,7 +398,7 @@ class PDFParser:
         except Exception as e:
             logger.error(f"Failed to save JSON files: {str(e)}")
             raise
-
+    @custom_logger.log_function_call
     def process_document(self, extract_images: bool = True, 
                          extract_text: bool = True, 
                          save_json: bool = True) -> Dict[str, Any]:
@@ -467,7 +468,7 @@ class PDFParser:
                 'status': 'error',
                 'message': f"Document processing failed: {str(e)}"
             }
-
+    @custom_logger.log_function_call
     def close(self):
         """
         Close the PDF document and clean up resources

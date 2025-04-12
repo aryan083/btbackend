@@ -12,7 +12,7 @@ import google.generativeai as genai
 from ..config import GEMINI_API_KEY
 from ..services.pdf_processor import PDFParser as DocumentService
 import fitz  # PyMuPDF
-
+from run import custom_logger
 logger = logging.getLogger(__name__)
 
 # Configure Gemini
@@ -22,6 +22,7 @@ model = genai.GenerativeModel('gemini-2.0-flash')
 # Create a blueprint with a more descriptive name
 rag_bp = Blueprint('document_processing', __name__)
 
+@custom_logger.log_function_call
 def allowed_file(filename: str) -> bool:
     """
     Check if file has an allowed extension
@@ -33,6 +34,7 @@ def allowed_file(filename: str) -> bool:
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in allowed_extensions
 
 
+@custom_logger.log_function_call
 @rag_bp.route('/upload_and_process', methods=['POST'])
 def upload_and_process_pdf():
     """
@@ -130,7 +132,9 @@ def upload_and_process_pdf():
             'error_code': 'PROCESSING_FAILED'
         }), 500
 
+
 @rag_bp.route('/process_book', methods=['POST'])
+@custom_logger.log_function_call
 def process_book():
     """
     Process a book PDF file
@@ -142,6 +146,7 @@ def process_book():
     request.form['document_type'] = 'book'
     return upload_and_process_pdf()
 
+@custom_logger.log_function_call
 @rag_bp.route('/process_syllabus', methods=['POST'])
 def process_syllabus():
     """
@@ -154,6 +159,7 @@ def process_syllabus():
     request.form['document_type'] = 'syllabus'
     return upload_and_process_pdf()
 
+@custom_logger.log_function_call
 @rag_bp.route('/uploads/<path:filename>')
 def serve_file(filename: str):
     """
@@ -171,6 +177,7 @@ def serve_file(filename: str):
             'error_code': 'FILE_NOT_FOUND'
         }), 404
 
+@custom_logger.log_function_call
 @rag_bp.route('/upload', methods=['POST'])
 def upload_pdf():
     """
@@ -290,6 +297,7 @@ def upload_pdf():
 #             'error_code': 'PROCESSING_FAILED'
 #         }), 500
 
+@custom_logger.log_function_call
 @rag_bp.route('/process_course_json', methods=['POST'])
 def process_course_json():
     """
@@ -336,6 +344,7 @@ def process_course_json():
 
 
 
+@custom_logger.log_function_call
 @rag_bp.route('/parse_document', methods=['POST'])
 def parse_document():
     """

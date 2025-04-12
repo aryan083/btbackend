@@ -14,7 +14,7 @@ from PIL import Image
 import google.generativeai as genai
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
-
+from run import custom_logger
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class RAGGenerationService:
         _gemini_model: Google's Gemini model instance (lazy loaded)
         _embedding_model: Sentence transformer model for generating embeddings (lazy loaded)
     """
-    
+    @custom_logger.log_function_call
     def __init__(self, supabase_url: str, supabase_key: str, gemini_api_key: str):
         """
         Initialize the RAG generation service.
@@ -116,6 +116,8 @@ class RAGGenerationService:
         """
         return re.sub(r'[<>:"/\\|?*:]', '_', name).strip()
 
+
+    @custom_logger.log_function_call
     def get_course_structure(self, document_dir: str) -> Dict:
         """
         Load the course structure from JSON file.
@@ -134,6 +136,7 @@ class RAGGenerationService:
             logger.error(f"Error loading course structure: {str(e)}")
             return {"Chapters": {}}
 
+    @custom_logger.log_function_call
     def generate_html_content(
         self,
         document_dir: str,
@@ -262,6 +265,7 @@ class RAGGenerationService:
                 "errors": [error_msg]
             }
 
+    @custom_logger.log_function_call
     def _retrieve_context(self, 
                          query_embedding: List[float], 
                          course_id: str,
@@ -287,6 +291,11 @@ class RAGGenerationService:
                 'course_filter': course_id
             }).execute()
 
+            # Log the response data
+            logger.info(f"Vector search response: {response.data}")
+
+            if response.data==None:
+                return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."
             if response.data:
                 return "\n".join(
                     f"<source>{r.get('content', '')}</source>" 
@@ -297,6 +306,7 @@ class RAGGenerationService:
             logger.warning(f"Vector search failed: {str(e)}")
             return ""
 
+    @custom_logger.log_function_call
     def _generate_article_content(
         self, 
         subtopic_name: str,
@@ -354,6 +364,7 @@ class RAGGenerationService:
         except Exception as e:
             logger.error(f"Failed to generate content: {str(e)}")
             return f"<p>Error generating content: {str(e)}</p>"
+    @custom_logger.log_function_call
     def process_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
         Process both text and image content for a course and generate HTML articles.
@@ -414,6 +425,7 @@ class RAGGenerationService:
                 "errors": [str(e)]
             }
 
+    @custom_logger.log_function_call
     def _process_text_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
         Process text content from JSON files.
@@ -471,6 +483,7 @@ class RAGGenerationService:
                 
         return results
 
+    @custom_logger.log_function_call
     def _process_image_content(self, base_path: str, course_id: str) -> Dict[str, Any]:
         """
         Process image content.
@@ -524,6 +537,7 @@ class RAGGenerationService:
                 
         return results
 
+    @custom_logger.log_function_call
     def _generate_text_summary(self, text: str) -> Optional[str]:
         """
         Generate text summary using Gemini model.
@@ -543,6 +557,7 @@ class RAGGenerationService:
             logger.error(f"Text summary error: {e}")
             return None
 
+    @custom_logger.log_function_call
     def _generate_image_summary(self, image_path: str) -> Optional[str]:
         """
         Generate image summary using Gemini model.
@@ -563,6 +578,7 @@ class RAGGenerationService:
             logger.error(f"Image summary error: {e}")
             return None
 
+    @custom_logger.log_function_call
     def _generate_embedding(self, text: str) -> Optional[List[float]]:
         """
         Generate embedding for text using sentence transformer.
@@ -580,6 +596,7 @@ class RAGGenerationService:
             logger.error(f"Embedding error: {e}")
             return None
 
+    @custom_logger.log_function_call
     def _store_record(self, table: str, data: Dict[str, Any]) -> bool:
         """
         Store record in Supabase.
@@ -598,6 +615,7 @@ class RAGGenerationService:
             logger.error(f"Supabase insert error: {e}")
             return False
 
+    @custom_logger.log_function_call
     def _generate_articles(
         self,
         base_path: str,
@@ -675,6 +693,7 @@ class RAGGenerationService:
                 "errors": [str(e)]
             }
 
+    @custom_logger.log_function_call
     def _save_article_to_supabase(self, 
                                  course_id: str,
                                  chapter_name: str,
@@ -752,6 +771,7 @@ class RAGGenerationService:
             logger.error(f"Error saving article to Supabase: {str(e)}")
             return None
             
+    @custom_logger.log_function_call
     def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
         """
         Update topic's articles_json field with new article ID using atomic update.
@@ -793,6 +813,7 @@ class RAGGenerationService:
             logger.error(f"Topic update error: {str(e)}")
             return False
 
+    @custom_logger.log_function_call
     def _clean_html_content(self, content: str) -> str:
         """
         Clean and format HTML content.
@@ -825,6 +846,7 @@ class RAGGenerationService:
             "": ""  # Default empty
         }.get(level, "")
 
+    @custom_logger.log_function_call
     def _build_teaching_instructions(self, pattern: Union[str, List[str]]) -> str:
         """Convert teaching pattern to prompt instructions."""
         instructions = []
@@ -882,60 +904,69 @@ class RAGGenerationService:
         # Image policy
         image_policy = ("- STRICTLY NO IMAGES ALLOWED" if not allow_images 
                         else "- Include relevant <figure> elements with proper <figcaption>")
+# - Minimum 3 code samples in <pre><code> blocks
+        logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code}  )")
+        logger.info(f"Context: {context}")
+        
+        if context =="":
+            return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
+            Use 100% of available token capacity for maximum depth and quality. {skill_section}
 
-        return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
-        Use 100% of available token capacity for maximum depth and quality. {skill_section}
+            **Mandatory Structure:**
+            1. <h1>Single Title</h1> (Only one H1 heading at beginning)
+            2. Table of Contents (Linked to section IDs)
+            3. Comprehensive Definition Section with Etymology
+            4. Technical Deep Dive with Mathematical Notation (if applicable)
+            5. Implementation Examples:
+            
+            - Error handling examples
+            6. Comparative Analysis Table:
+            <table class="comparative">
+                <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
+                <tbody>...</tbody>
+            </table>
+            7. Best Practices & Anti-Patterns
+            8. Security Considerations
+            9. Performance Characteristics
+            10. Cross-References to Related Concepts
 
-        **Mandatory Structure:**
-        1. <h1>Single Title</h1> (Only one H1 heading at beginning)
-        2. Table of Contents (Linked to section IDs)
-        3. Comprehensive Definition Section with Etymology
-        4. Technical Deep Dive with Mathematical Notation (if applicable)
-        5. Implementation Examples:
-        - Minimum 3 code samples in <pre><code> blocks
-        - Error handling examples
-        6. Comparative Analysis Table:
-        <table class="comparative">
-            <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
-            <tbody>...</tbody>
-        </table>
-        7. Best Practices & Anti-Patterns
-        8. Security Considerations
-        9. Performance Characteristics
-        10. Cross-References to Related Concepts
+            **Context Materials:**
+            {context}
 
-        **Context Materials:**
-        {context}
+            **Quality Requirements:**
+            - PhD-level technical depth prioritized
+            - All claims must be backed by context or examples
+            - No filler content - maximize information density
+            - Strict technical accuracy over readability
+            - Include industry-specific terminology
+            - No token preservation - use full capacity
 
-        **Quality Requirements:**
-        - PhD-level technical depth prioritized
-        - All claims must be backed by context or examples
-        - No filler content - maximize information density
-        - Strict technical accuracy over readability
-        - Include industry-specific terminology
-        - No token preservation - use full capacity
+            **HTML Requirements:**
+            - Only <body> content allowed (no head/styles)
+            - Semantic HTML5 elements required (article, section, etc.)
+            - Tables must use proper <thead>/<tbody> structure
+            - Code samples require syntax highlighting hints and must have word wrapping to fit display
+            - External links open in new tab
+            - All sections must have ID attributes
+            - No markdown - only pure HTML
+            - Error handling examples in red bordered divs
 
-        **HTML Requirements:**
-        - Only <body> content allowed (no head/styles)
-        - Semantic HTML5 elements required (article, section, etc.)
-        - Tables must use proper <thead>/<tbody> structure
-        - Code samples require syntax highlighting hints and must have word wrapping to fit display
-        - External links open in new tab
-        - All sections must have ID attributes
-        - No markdown - only pure HTML
-        - Error handling examples in red bordered divs
+            **Special Instructions:**
+            If the gethered content from the context is not relevant to the subtopic, then just return "No relevant content found", do not generate any content.
+            strictly follow this instruction at any cost.
+            {teaching_instructions}
+            {image_policy}
+            {user_prompt}
 
-        **Special Instructions:**
-        {teaching_instructions}
-        {image_policy}
-        {user_prompt}
+            **Prohibitions:**
+            - No "Note:" or "Tip:" boxes
+            - No colloquial language
+            - No placeholder comments
+            - No unfinished sections
+            - No markdown formatting
+            - No duplicated content
 
-        **Prohibitions:**
-        - No "Note:" or "Tip:" boxes
-        - No colloquial language
-        - No placeholder comments
-        - No unfinished sections
-        - No markdown formatting
-        - No duplicated content
-
-        Output MUST use 100% of available tokens while maintaining technical precision."""
+            Output MUST use 100% of available tokens while maintaining technical precision."""
+            
+        else:
+            return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."

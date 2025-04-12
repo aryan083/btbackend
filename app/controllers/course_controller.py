@@ -10,8 +10,10 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 course_bp = Blueprint('course', __name__)
 course_service = CourseService()
-
+from run import custom_logger
 @course_bp.route('/courses', methods=['POST'])
+@custom_logger.log_function_call
+
 def create_course():
     """
     Create a new course
@@ -58,7 +60,7 @@ def create_course():
 
 
 
-
+@custom_logger.log_function_call
 @course_bp.route('/send_pdf_to_gemini', methods=['POST'])
 def send_pdf_to_gemini():
     """

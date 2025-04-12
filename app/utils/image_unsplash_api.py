@@ -6,6 +6,7 @@ import google.generativeai as genai
 from requests.auth import HTTPBasicAuth
 from app.config import Config
 import logging
+from run import custom_logger
 
 from app.utils.course_utils import get_course_articles
 
@@ -13,6 +14,7 @@ from app.utils.course_utils import get_course_articles
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+@custom_logger.log_function_call
 def init_gemini():
     """
     Initialize the Gemini AI model
@@ -28,6 +30,7 @@ def init_gemini():
         logger.error(f"Failed to initialize Gemini: {str(e)}")
         raise
 
+@custom_logger.log_function_call
 def init_supabase():
     """
     Initialize Supabase client with proper error handling
@@ -88,6 +91,7 @@ def init_supabase():
 #         logger.error(f"Error getting article content: {str(e)}")
 #         raise
 
+@custom_logger.log_function_call
 def get_image_query(client, article_content):
     """
     Generate image search query from article content
@@ -115,6 +119,7 @@ def get_image_query(client, article_content):
         logger.error(f"Failed to generate image query: {str(e)}")
         raise
 
+@custom_logger.log_function_call
 def query_unsplash(query, num_images=1):
     """
     Query Unsplash API for images
@@ -216,6 +221,7 @@ def query_unsplash(query, num_images=1):
 #         logger.error(f"Error determining best image: {str(e)}")
 #         return "0"  # Default to first image on error
 
+@custom_logger.log_function_call
 def append_link_in_supabase(supabase, article_id, image_url):
     """
     Update article with image URL in Supabase
@@ -242,7 +248,8 @@ def append_link_in_supabase(supabase, article_id, image_url):
     except Exception as e:
         logger.error(f"Failed to update article in Supabase: {str(e)}")
         raise
-    
+
+@custom_logger.log_function_call
 def unsplash_api_fetcher(course_id: str):
     """
     Main function to fetch and attach images to articles using existing data
@@ -387,6 +394,6 @@ def unsplash_api_fetcher(course_id: str):
 #         return 'No images found.'
 
 
-if __name__ == "__main__":
-    unsplash_api_fetcher("b6f57120-039a-464c-94b2-9a4533cc811a")
+# if __name__ == "__main__":
+#     unsplash_api_fetcher("b6f57120-039a-464c-94b2-9a4533cc811a")
     

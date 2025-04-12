@@ -1,6 +1,9 @@
 import os
 from pathlib import Path
-
+import logging
+from run import custom_logger
+logger = logging.getLogger(__name__)
+@custom_logger.log_function_call
 def create_directory(dir_path: str) -> bool:
     """
     Create a directory at the specified path

@@ -1,8 +1,9 @@
 from flask import Blueprint, request, jsonify
 from app.services.directory_service import create_directory
-
+from run import custom_logger
 directory_bp = Blueprint('directory', __name__)
 
+@custom_logger.log_function_call
 @directory_bp.route('/create', methods=['POST'])
 def create_dir():
     """

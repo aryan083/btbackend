@@ -10,6 +10,7 @@ import google.generativeai as genai
 from ..config import GEMINI_API_KEY
 import fitz  # PyMuPDF
 import json
+from run import custom_logger
 logger = logging.getLogger(__name__)
 
 class CourseService:
@@ -79,6 +80,7 @@ class CourseService:
             logger.error(f"Error in create_course: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
     def extract_text_from_pdf(self, pdf_file_stream):
         """
         Extract text content from a PDF file stream
@@ -105,6 +107,7 @@ class CourseService:
             
         return pdf_text
     
+    @custom_logger.log_function_call
     def clean_gemini_json_response(self, response_text):
         """
         Clean the JSON response from Gemini to ensure it's properly formatted
@@ -128,6 +131,7 @@ class CourseService:
             
         return response_text.strip()
         
+    @custom_logger.log_function_call
     def extract_course_content(self, pdf_text):
         """
         Extract structured course content from PDF text
@@ -175,6 +179,7 @@ class CourseService:
         
         return course_content
         
+    @custom_logger.log_function_call
     def extract_keywords(self, pdf_text):
         """
         Extract keywords, skills and technologies from PDF text
@@ -213,6 +218,7 @@ class CourseService:
         
         return keywords
         
+    @custom_logger.log_function_call
     def generate_welcome_message(self, course_content, keywords):
         """
         Generate a welcome message for the course
@@ -245,6 +251,7 @@ class CourseService:
             
         return welcome_message
         
+    @custom_logger.log_function_call
     def generate_course_title(self, course_content, keywords):
         """
         Generate a title for the course
@@ -276,6 +283,7 @@ class CourseService:
             
         return course_title
 
+    @custom_logger.log_function_call
     def save_course_json(self, course_json, output_dir: str):
         """
         Save course JSON to output directory
@@ -296,6 +304,7 @@ class CourseService:
             json.dump(course_json, f, indent=2)
         return json_path
         
+    @custom_logger.log_function_call
     def process_pdf(self, pdf_file_stream, output_dir: str = None):
         """
         Main method to process PDF and return all required information

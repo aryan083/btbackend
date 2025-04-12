@@ -14,20 +14,15 @@ from datetime import datetime
 from config import Config
 import re 
 from fuzzywuzzy import fuzz
+from run import custom_logger
 
 # Set up colored logging
-handler = colorlog.StreamHandler()
-handler.setFormatter(colorlog.ColoredFormatter(
-    Config.LOG_FORMAT,
-    log_colors=Config.LOG_COLORS
-))
-logger = colorlog.getLogger(__name__)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)    
 
 class PDFParser:
     """Enhanced PDF parser for text and image extraction"""
-
+    @custom_logger.log_function_call
     def __init__(self, pdf_path: str, output_base_dir: str):
         """
         Initialize the PDF parser
@@ -74,6 +69,7 @@ class PDFParser:
             logger.error(f"Failed to initialize PDF parser: {str(e)}")
             raise RuntimeError(f"Failed to open PDF: {str(e)}")
 
+    @custom_logger.log_function_call
     def _process_toc(self) -> List[Dict[str, Any]]:
         """
         Process table of contents into chapter structure
@@ -100,6 +96,7 @@ class PDFParser:
         
         return chapters
 
+    @custom_logger.log_function_call
     def _extract_metadata(self) -> Dict[str, Any]:
         """
         Extract metadata from PDF document
@@ -133,6 +130,7 @@ class PDFParser:
                 return None
         return None
 
+    @custom_logger.log_function_call
     def _extract_images(self) -> List[Dict[str, Any]]:
         """
         Extract images from PDF pages
@@ -213,6 +211,7 @@ class PDFParser:
             
         return images
 
+    @custom_logger.log_function_call
     def _extract_text_with_unstructured(self) -> List[Dict[str, Any]]:
         """
         Extract text from PDF pages using unstructured
@@ -252,6 +251,7 @@ class PDFParser:
             logger.error(f"Text extraction failed: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
     def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
                         text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -343,6 +343,7 @@ class PDFParser:
             logger.error(f"Failed to save JSON files: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
     def _create_chapter_map(self):
         """Map JSON chapters to PDF structure"""
         try:
@@ -359,6 +360,7 @@ class PDFParser:
             raise
 
  
+    @custom_logger.log_function_call
     def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
                         text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -477,7 +479,7 @@ class PDFParser:
     #     @description: Processes the PDF as a book, extracting metadata, text, and images
     #     """
     #     return self.process_document(extract_images=True, extract_text=True, save_json=True)
-
+    @custom_logger.log_function_call
     def process_document(self, extract_images: bool = True, 
                          extract_text: bool = True, 
                          save_json: bool = True) -> Dict[str, Any]:
@@ -553,6 +555,7 @@ class PDFParser:
                 'message': f"Document processing failed: {str(e)}"
             }
 
+    @custom_logger.log_function_call
     def close(self):
         """
         Close the PDF document and clean up resources
