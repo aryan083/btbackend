@@ -23,7 +23,7 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static
 OUTPUT_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static', 'uploads')
 
 # RAG settings
-MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', '0.7'))
+MATCH_THRESHOLD = float(os.getenv('MATCH_THRESHOLD', '0.3'))
 MAX_RESULTS = int(os.getenv('MAX_RESULTS', '5'))
 
 class Config:

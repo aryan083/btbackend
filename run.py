@@ -109,7 +109,7 @@ class CustomLogger:
 # Initialize the custom logger
 custom_logger = CustomLogger()
 
-@custom_logger.log_function_call
+# @custom_logger.log_function_call
 def setup_logging():
     """Configure colored logging"""
     logger = logging.getLogger()
@@ -136,7 +136,7 @@ def run_development_server():
             host='0.0.0.0',
             port=5000,
             debug=True,
-            use_reloader=True,
+            use_reloader=False,
             extra_files=extra_files
         )
     except Exception as e:

@@ -67,7 +67,7 @@ def generate_content():
             course_id=course_id,
             output_dir=str(output_dir),
             topic_ids=topic_ids,
-            match_threshold=float(data.get('match_threshold', 0.7)),
+            match_threshold=float(data.get('match_threshold', 0.3)),
             max_results=int(data.get('max_results', 5))
         )
 
