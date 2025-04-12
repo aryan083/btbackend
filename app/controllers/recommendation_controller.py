@@ -22,30 +22,20 @@ recommendation_bp = Blueprint('recommendation', __name__)
 
 def recommendation():
 
-    print("hello")
 
     try:
 
         user_id = request.form.get("user_id")
         article_id = request.form.get("article_id")
-        # logger.info(f"""dataa ---------------------------------------------------------------
-        # ---------------------------------------------------------------------------- >{data}""")
+
 
         supabase = Recommendation.supabase_init()
-        # user_id = data["user_id"]
-        # article_id = data["article_id"]
 
         response = Recommendation.get_articles(supabase,user_id)
 
         formatted_response = Recommendation.format_articles(response)
         print(f"{formatted_response}")
         top_responses = Recommendation.recommendation_algorithm(formatted_response, article_id)
-
-        
-
-
-
-
 
         return jsonify({
             'message': 'TOP IDs Fetched successfully',
