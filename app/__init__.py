@@ -32,7 +32,7 @@ def create_app(config_name=None):
     
     # Configure upload folder
     app.config['UPLOAD_FOLDER'] = str(upload_dir)
-    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  # 16MB max file size
+    app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  
     
     # Configure watchdog to ignore PyTorch library files
     if sys.platform == 'win32':
