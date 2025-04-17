@@ -9,6 +9,7 @@ import logging
 from run import custom_logger
 
 from app.utils.course_utils import get_course_articles
+from app.utils.supabase_utils import bulk_update
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
@@ -235,19 +236,65 @@ def append_link_in_supabase(supabase, article_id, image_url):
         if not article_id or not image_url:
             raise ValueError("Article ID and image URL are required")
             
-        response = (supabase.table("articles")
-            .update({"content_img": image_url})
-            .eq("article_id", article_id)
-            .execute())
+        # Use bulk update with a single record
+        result = bulk_update(
+            supabase,
+            "articles",
+            [{"article_id": article_id, "content_img": image_url}],
+            id_field="article_id"
+        )
             
-        if not response.data:
+        if result["success_count"] > 0:
+            logger.info(f"Successfully updated article {article_id} with image")
+        else:
             raise Exception("Failed to update article")
             
-        logger.info(f"Successfully updated article {article_id} with image")
-        
     except Exception as e:
         logger.error(f"Failed to update article in Supabase: {str(e)}")
         raise
+
+@custom_logger.log_function_call
+def bulk_append_links_in_supabase(supabase, article_updates):
+    """
+    Update multiple articles with image URLs in Supabase in bulk
+    
+    Args:
+        supabase (Client): Supabase client
+        article_updates (List[Dict[str, str]]): List of article updates with format
+            [{"article_id": "id1", "image_url": "url1"}, ...]
+            
+    Returns:
+        Dict[str, Any]: Result of the operation with success count and errors
+    """
+    try:
+        if not article_updates:
+            logger.warning("No article updates provided")
+            return {"success_count": 0, "errors": ["No article updates provided"]}
+            
+        # Format updates for bulk operation
+        formatted_updates = [
+            {"article_id": update["article_id"], "content_img": update["image_url"]}
+            for update in article_updates
+        ]
+        
+        # Perform bulk update
+        result = bulk_update(
+            supabase,
+            "articles",
+            formatted_updates,
+            id_field="article_id"
+        )
+        
+        if result["success_count"] > 0:
+            logger.info(f"Successfully updated {result['success_count']} articles with images")
+        else:
+            logger.warning("No articles were updated")
+            
+        return result
+        
+    except Exception as e:
+        logger.error(f"Failed to bulk update articles in Supabase: {str(e)}")
+        return {"success_count": 0, "errors": [str(e)]}
 
 @custom_logger.log_function_call
 def unsplash_api_fetcher(course_id: str):
@@ -272,6 +319,8 @@ def unsplash_api_fetcher(course_id: str):
 
         # Process articles in batch
         success_count = 0
+        article_updates = []
+        
         for article in response:
             article_id = None  # Ensure article_id is defined
             try:
@@ -289,13 +338,25 @@ def unsplash_api_fetcher(course_id: str):
                 # Generate and apply image
                 query = get_image_query(client, content)
                 if unsplash_link := query_unsplash(query):
-                    append_link_in_supabase(supabase, article_id, unsplash_link)
+                    # Add to batch for bulk update
+                    article_updates.append({
+                        "article_id": article_id,
+                        "image_url": unsplash_link
+                    })
                     success_count += 1
-                    logger.info(f"Updated {article_id}")
+                    logger.info(f"Prepared update for {article_id}")
 
             except Exception as e:
                 logger.error(f"Failed article {article_id}: {str(e)}")
                 continue
+        
+        # Perform bulk update if we have updates
+        if article_updates:
+            bulk_result = bulk_append_links_in_supabase(supabase, article_updates)
+            success_count = bulk_result["success_count"]
+            if bulk_result.get("errors"):
+                for error in bulk_result["errors"]:
+                    logger.error(f"Bulk update error: {error}")
 
         logger.info(f"Processed {len(response)} articles | {success_count} successes")
 

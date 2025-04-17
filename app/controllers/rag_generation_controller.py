@@ -170,6 +170,7 @@ def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) ->
         logger.info(f"Processing images for course ID: {course_id}")
         unsplash_api_fetcher(course_id=course_id)
         
+        
         # Since unsplash_api_fetcher processes all articles for the course,
         # we'll consider all articles as processed
         results["processed"] = len(article_ids)
@@ -271,7 +272,7 @@ def upload_and_process_pdf():
                 skill_level=skill_level,
                 topic_metadata=topic_metadata,
                 user_id=user_id,
-                allow_images=False 
+                allow_images=False
                 )
                 
                 # Extract article generation results

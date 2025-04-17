@@ -15,6 +15,7 @@ import google.generativeai as genai
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 from run import custom_logger
+from app.utils.supabase_utils import bulk_insert, bulk_update, bulk_upsert
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -69,7 +70,7 @@ class RAGGenerationService:
             The initialized embedding model
         """
         if self._embedding_model is None:
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2')
+            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2') 
             
             try:
                 # Try to load the model if it exists
@@ -142,7 +143,7 @@ class RAGGenerationService:
         document_dir: str,
         course_id: str,
         output_dir: str,
-        match_threshold: float = 0.3,
+        match_threshold: float = 0.7,
         max_results: int = 5,
         user_prompt: str = "",
         teaching_pattern: Union[str, List[str]] = "",
@@ -181,6 +182,10 @@ class RAGGenerationService:
             generated_files = {}
             generated_articles = []
             errors = []
+            
+            # Collect all articles for bulk insert
+            articles_to_insert = []
+            topic_updates = []
 
             for chapter_name, chapter_data in course_structure["Chapters"].items():
                 if not isinstance(chapter_data, dict):
@@ -217,38 +222,65 @@ class RAGGenerationService:
                         with open(filepath, 'w', encoding='utf-8') as f:
                             f.write(content)
                         
-                        # Save article to Supabase
-                        article_id = self._save_article_to_supabase(
-                            course_id=course_id,
-                            chapter_name=chapter_name,
-                            subtopic_code=subtopic_code,
-                            subtopic_name=subtopic_name,
-                            content=content,
-                            filepath=filepath,
-                            user_id=user_id,
-                            skill_level=skill_level,
-                            teaching_pattern=teaching_pattern,
-                            topic_metadata=topic_metadata
-                        )
-                        
-                        if article_id:
-                            generated_articles.append({
-                                "article_id": article_id,
-                                "article_name": f"{subtopic_name} - {subtopic_code}",
-                                "filepath": filepath,
-                                "topic_id": topic_metadata.get(subtopic_name) if topic_metadata else None
-                            })
-                            generated_files[filepath] = content
-                            logger.info(f"Created and saved article: {filepath}")
-                        else:
-                            error_msg = f"Failed to save article for {subtopic_code}"
+                        # Find topic_id from metadata
+                        topic_id = topic_metadata.get(subtopic_name) if topic_metadata else None
+                        if not topic_id:
+                            error_msg = f"No topic ID found for subtopic: {subtopic_name}"
                             errors.append(error_msg)
                             logger.error(error_msg)
+                            continue
+                        
+                        # Create article record for bulk insert
+                        article_data = {
+                            "article_name": f"{subtopic_name} - {subtopic_code}",
+                            "tags": {
+                                "course_id": course_id,
+                                "chapter_name": chapter_name,
+                                "subtopic_code": subtopic_code,
+                                "skill_level": skill_level,
+                                "teaching_pattern": teaching_pattern
+                            },
+                            "content_text": content,
+                            "topic_id": topic_id,
+                            "is_completed": False,
+                            "user_id": user_id if user_id else None
+                        }
+                        
+                        articles_to_insert.append(article_data)
+                        generated_files[filepath] = content
+                        
+                        # Prepare topic update
+                        topic_updates.append({
+                            "topic_id": topic_id,
+                            "articles_json": {"article_ids": []}  # Will be populated after insert
+                        })
 
                     except Exception as subtopic_error:
                         error_msg = f"Failed {subtopic_code}: {str(subtopic_error)}"
                         errors.append(error_msg)
                         logger.error(error_msg)
+            
+            # Perform bulk insert for all articles
+            if articles_to_insert:
+                bulk_result = self._save_articles_bulk(articles_to_insert, topic_updates)
+                
+                # Process results
+                if bulk_result["articles"]["success_count"] > 0:
+                    # Map article IDs to topics
+                    article_ids = bulk_result["articles"]["article_ids"]
+                    for i, article_id in enumerate(article_ids):
+                        if i < len(topic_updates):
+                            topic_id = topic_updates[i]["topic_id"]
+                            generated_articles.append({
+                                "article_id": article_id,
+                                "article_name": articles_to_insert[i]["article_name"],
+                                "filepath": list(generated_files.keys())[i] if i < len(generated_files) else None,
+                                "topic_id": topic_id
+                            })
+                
+                # Add any errors from bulk operation
+                errors.extend(bulk_result["articles"]["errors"])
+                errors.extend(bulk_result["topics"]["errors"])
 
             return {
                 "files": generated_files,
@@ -444,6 +476,9 @@ class RAGGenerationService:
             logger.warning(f"Text directory not found: {text_dir}")
             return results
 
+        # Collect all records for bulk insert
+        records_to_insert = []
+        
         for text_file in text_dir.glob("*.json"):
             try:
                 with open(text_file, 'r') as f:
@@ -472,14 +507,17 @@ class RAGGenerationService:
                         'summary_vector': embedding
                     }
                     
-                    # Store in database
-                    if self._store_record('material_text', record):
-                        results["processed"] += 1
-                    else:
-                        results["errors"].append(f"Failed to store text record: {chunk_id}")
+                    # Add to batch for bulk insert
+                    records_to_insert.append(record)
                         
             except Exception as e:
                 results["errors"].append(f"Error processing text file {text_file}: {str(e)}")
+        
+        # Perform bulk insert if we have records
+        if records_to_insert:
+            bulk_result = self._store_records_bulk('material_text', records_to_insert)
+            results["processed"] = bulk_result["success_count"]
+            results["errors"].extend(bulk_result["errors"])
                 
         return results
 
@@ -501,6 +539,9 @@ class RAGGenerationService:
         if not image_dir.exists():
             logger.warning(f"Images directory not found: {image_dir}")
             return results
+
+        # Collect all records for bulk insert
+        records_to_insert = []
 
         for image_file in image_dir.glob("*"):
             if image_file.suffix.lower() not in ('.png', '.jpg', '.jpeg'):
@@ -526,14 +567,17 @@ class RAGGenerationService:
                     'summary_vector': embedding
                 }
                 
-                # Store in database
-                if self._store_record('material_image', record):
-                    results["processed"] += 1
-                else:
-                    results["errors"].append(f"Failed to store image record: {chunk_id}")
+                # Add to batch for bulk insert
+                records_to_insert.append(record)
                     
             except Exception as e:
                 results["errors"].append(f"Error processing image {image_file}: {str(e)}")
+                
+        # Perform bulk insert if we have records
+        if records_to_insert:
+            bulk_result = self._store_records_bulk('material_image', records_to_insert)
+            results["processed"] = bulk_result["success_count"]
+            results["errors"].extend(bulk_result["errors"])
                 
         return results
 
@@ -609,11 +653,31 @@ class RAGGenerationService:
             bool: True if successful, False otherwise
         """
         try:
-            self.supabase_client.table(table).insert(data).execute()
-            return True
+            # Use the bulk insert function with a single record
+            result = bulk_insert(self.supabase_client, table, [data])
+            return result["success_count"] > 0
         except Exception as e:
             logger.error(f"Supabase insert error: {e}")
             return False
+            
+    @custom_logger.log_function_call
+    def _store_records_bulk(self, table: str, records: List[Dict[str, Any]], batch_size: int = 100) -> Dict[str, Any]:
+        """
+        Store multiple records in Supabase in bulk.
+        
+        Args:
+            table (str): Table name
+            records (List[Dict[str, Any]]): List of records to store
+            batch_size (int): Number of records to insert in each batch
+            
+        Returns:
+            Dict[str, Any]: Result of the operation with success count and errors
+        """
+        try:
+            return bulk_insert(self.supabase_client, table, records, batch_size)
+        except Exception as e:
+            logger.error(f"Supabase bulk insert error: {e}")
+            return {"success_count": 0, "errors": [str(e)]}
 
     @custom_logger.log_function_call
     def _generate_articles(
@@ -749,14 +813,14 @@ class RAGGenerationService:
                 "user_id": user_id if user_id else None
             }
             
-            # Insert article into Supabase
-            response = self.supabase_client.table("articles").insert(article_data).execute()
+            # Use bulk insert with a single record
+            result = bulk_insert(self.supabase_client, "articles", [article_data])
             
-            if not response.data:
+            if not result["success_count"]:
                 logger.error("Failed to save article: No data returned")
                 return None
                 
-            article_id = response.data[0].get('article_id')
+            article_id = result["data"][0].get('article_id') if result.get("data") else None
             if not article_id:
                 logger.error("No article ID returned from insert")
                 return None
@@ -770,6 +834,60 @@ class RAGGenerationService:
         except Exception as e:
             logger.error(f"Error saving article to Supabase: {str(e)}")
             return None
+            
+    def _save_articles_bulk(self, 
+                           articles_data: List[Dict[str, Any]], 
+                           topic_updates: List[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """
+        Save multiple articles to Supabase in bulk and optionally update topics.
+        
+        Args:
+            articles_data (List[Dict[str, Any]]): List of article data to save
+            topic_updates (List[Dict[str, Any]], optional): List of topic updates to perform
+            
+        Returns:
+            Dict[str, Any]: Result of the operation with success count and errors
+        """
+        result = {
+            "articles": {"success_count": 0, "errors": [], "article_ids": []},
+            "topics": {"success_count": 0, "errors": []}
+        }
+        
+        try:
+            # Clean content for all articles
+            for article in articles_data:
+                if "content_text" in article:
+                    article["content_text"] = self._clean_html_content(article["content_text"])
+            
+            # Bulk insert articles
+            articles_result = bulk_insert(self.supabase_client, "articles", articles_data)
+            result["articles"]["success_count"] = articles_result["success_count"]
+            result["articles"]["errors"] = articles_result["errors"]
+            
+            # Extract article IDs for topic updates
+            if articles_result.get("data"):
+                result["articles"]["article_ids"] = [
+                    article.get("article_id") for article in articles_result["data"] 
+                    if article.get("article_id")
+                ]
+            
+            # Update topics if needed
+            if topic_updates and result["articles"]["article_ids"]:
+                topics_result = bulk_update(
+                    self.supabase_client, 
+                    "topics", 
+                    topic_updates,
+                    id_field="topic_id"
+                )
+                result["topics"]["success_count"] = topics_result["success_count"]
+                result["topics"]["errors"] = topics_result["errors"]
+                
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error in bulk article save: {str(e)}")
+            result["articles"]["errors"].append(str(e))
+            return result
             
     @custom_logger.log_function_call
     def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
