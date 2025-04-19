@@ -201,7 +201,13 @@ def upload_and_process_pdf():
         document_type = request.form.get('document_type', 'book')
         document_name = request.form.get('document_name', '')
 
-        document_dir = Path(current_app.config['UPLOAD_FOLDER']) / (document_name or secure_filename(file.filename).rsplit('.', 1)[0])
+        # Create document directory with consistent naming
+        upload_dir = Path(current_app.config['UPLOAD_FOLDER'])
+        # Use document_name if provided, otherwise use filename without extension
+        output_dir = document_name if document_name else secure_filename(file.filename).rsplit('.', 1)[0]
+        # Ensure consistent naming by replacing spaces with underscores
+        output_dir = output_dir.replace(' ', '_')
+        document_dir = Path(upload_dir) / output_dir
 
         # Validate required parameters
         if not all([course_id, user_id]):

@@ -105,6 +105,7 @@ def send_pdf_to_gemini():
             }), 400
         #remove .pdf
         output_dir = output_dir.replace('.pdf', '')
+        output_dir = output_dir.replace(' ', '_')
         output_dir = Path(upload_dir) / output_dir
         output_dir.mkdir(parents=True, exist_ok=True)
 
