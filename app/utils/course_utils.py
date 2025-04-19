@@ -48,10 +48,10 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
         }
     """
     try:
+        # No need for artificial delay
+        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
         import time
         time.sleep(10)
-        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
         # Verify user access
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -126,11 +126,11 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
         Optional[CourseDetailedData]: Detailed course data or None if not found
     """
     try:
-        import time
-        time.sleep(10)
+        # No need for artificial delay
         # Initialize Supabase client
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
+        import time
+        time.sleep(10)
         # First, verify user has access to this course
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -223,10 +223,10 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
         Dict[str, Any]: Course summary data or empty dict if not found
     """
     try:
+        # No need for artificial delay
+        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
         import time
         time.sleep(10)
-        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        
         # Get course data
         course_response = supabase.table('courses')\
             .select('course_name, skill_level, teaching_pattern, user_prompt, created_at')\
@@ -262,9 +262,10 @@ def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
         List[Dict[str, Any]]: A list of articles for the given course
     """
     try:
-        import time 
+        # Initialize Supabase client using Config values
+        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
+        import time
         time.sleep(10)
-        supabase: Client = create_client("https://mouwhbulaoghvsxbvmwj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdXdoYnVsYW9naHZzeGJ2bXdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0NjI1NzQsImV4cCI6MjA1NjAzODU3NH0.52PcqiCjO8L1VU1lY7t01VLVSD_Cvz0OQFuPfT7lJ2w")
         #articles doesn't have column for course_id it has metadata json with course_id so see in the metadata_json for article_id
         articles_response = supabase.table('articles')\
             .select('*')\

@@ -326,12 +326,16 @@ class RAGGenerationService:
             # Log the response data
             logger.info(f"Vector search response: {response.data}")
 
+
             if response.data==None:
-                return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."
+                response = self.supabase_client.table('material_text').select('*').match('course_id', course_id).execute()
+                # logger.info(f"Material text response: {response.data}")
+                logger.info("FIND DATATATATATATATTATATAATATTAT")
+                return response.data
             if response.data:
                 return "\n".join(
-                    f"<source>{r.get('content', '')}</source>" 
-                    for r in response.data[:3]
+                    f"<source>{r.get('content', '')}</source>"                    
+                    for r in response.data
                 )
             return ""
         except Exception as e:

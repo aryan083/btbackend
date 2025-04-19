@@ -335,16 +335,37 @@ def unsplash_api_fetcher(course_id: str):
                     logger.warning(f"Skipping empty content for {article_id}")
                     continue
 
-                # Generate and apply image
+                # Generate and apply image and title
                 query = get_image_query(client, content)
                 if unsplash_link := query_unsplash(query):
-                    # Add to batch for bulk update
-                    article_updates.append({
-                        "article_id": article_id,
-                        "image_url": unsplash_link
-                    })
-                    success_count += 1
-                    logger.info(f"Prepared update for {article_id}")
+                    # Generate title using Gemini
+                    title_prompt = """Generate an engaging and SEO-friendly title for this article that captures its essence based on the content and it should be catchy.
+                    The title should be 8-12 words long and include relevant keywords.
+                    Make it attention-grabbing while maintaining accuracy."""
+                    
+                    try:
+                        title_response = client.generate_content([title_prompt, content])
+                        # Extract just the first title from response and clean it
+                        new_title = title_response.text.strip()
+                        # Remove any markdown formatting or quotes that might be in the title
+                        new_title = new_title.replace('"', '').replace('*', '').replace('#', '').strip()
+                        # If multiple lines, just take the first one
+                        if '\n' in new_title:
+                            new_title = new_title.split('\n')[0].strip()
+                        
+                        if new_title:
+                            # Add to batch for bulk update with both title and image
+                            article_updates.append({
+                                "article_id": article_id,
+                                "title": new_title,
+                                "content_img": unsplash_link
+                            })
+                            success_count += 1
+                            logger.info(f"Prepared update for {article_id} with title: {new_title}")
+                            
+                    except Exception as e:
+                        logger.error(f"Error generating title for article {article_id}: {str(e)}")
+                        continue
 
             except Exception as e:
                 logger.error(f"Failed article {article_id}: {str(e)}")
@@ -352,11 +373,35 @@ def unsplash_api_fetcher(course_id: str):
         
         # Perform bulk update if we have updates
         if article_updates:
-            bulk_result = bulk_append_links_in_supabase(supabase, article_updates)
-            success_count = bulk_result["success_count"]
-            if bulk_result.get("errors"):
-                for error in bulk_result["errors"]:
+            # Format updates for bulk operation with both title and content_img
+            formatted_updates = [
+                {
+                    "article_id": update["article_id"],
+                    "title": update["title"],
+                    "content_img": update["content_img"]
+                }
+                for update in article_updates
+            ]
+            
+            # Perform bulk update with correct ID field parameter
+            result = bulk_update(
+                supabase,
+                "articles",
+                formatted_updates,
+                "article_id"  # Specify the correct ID field
+            )
+            
+            if result["success_count"] > 0:
+                logger.info(f"Successfully updated {result['success_count']} articles with titles and images")
+            else:
+                logger.error("No articles were updated - Check if article_id exists and is valid")
+            
+            if result.get("errors"):
+                for error in result["errors"]:
                     logger.error(f"Bulk update error: {error}")
+                    
+            # Log the actual data we tried to update for debugging
+            logger.info(f"Attempted to update {len(formatted_updates)} articles with data structure: {formatted_updates[0] if formatted_updates else 'No updates'}")
 
         logger.info(f"Processed {len(response)} articles | {success_count} successes")
 

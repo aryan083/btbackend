@@ -293,11 +293,16 @@ def upload_and_process_pdf():
                 
                 # Process images for generated articles
                 image_results = {}
-                if generated_articles:
-                    logger.info(f"Processing images for {len(generated_articles)} articles")
-                    image_results = process_article_images(generated_articles, course_id)
-                    logger.info(f"Image processing results: {image_results}")
+                # if generated_articles:
+                logger.info(f"Processing images for {len(generated_articles)} articles")
+                image_results = process_article_images(generated_articles, course_id)
+                logger.info(f"Image processing results: {image_results}")
                 
+                # Forcefully Delete document directory
+                shutil.rmtree(document_dir, ignore_errors=True)
+                
+                logger.info(f"Deleted document directory: {document_dir}")
+
                 return jsonify({
                     'status': 'success',
                     'file_path': str(file_path),
