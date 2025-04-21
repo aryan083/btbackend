@@ -1,7 +1,8 @@
+# Ignore specific files
 .env
 .windsurfrules
 __pycache__/
-.pyc
+*.pyc
 .qodo
 .cursor
 config/
@@ -10,15 +11,12 @@ static/
 uploads/
 tests/
 output/large_file.ext
-app/all-mpnet-base-v2
 app/all-mpnet-base-v2/
-/app/all-mpnet-base-v2
-*.pdf
 app/all-mpnet-base-v2/vocab.txt
 app/all-mpnet-base-v2/tokenizer.json
-ignore all the files in the testitems folder
+
+# Ignore all files in testitems folder
 testitems/
-ignore all the pdf files in the testitems folder
+
+# Ignore all PDF files in the testitems folder
 testitems/*.pdf
-ignore all the files in the testitems folder
-testitems/
