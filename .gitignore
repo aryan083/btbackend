@@ -18,3 +18,7 @@ app/all-mpnet-base-v2/vocab.txt
 app/all-mpnet-base-v2/tokenizer.json
 ignore all the files in the testitems folder
 testitems/
+ignore all the pdf files in the testitems folder
+testitems/*.pdf
+ignore all the files in the testitems folder
+testitems/
