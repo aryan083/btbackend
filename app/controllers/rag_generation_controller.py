@@ -3,6 +3,7 @@ Controller module for handling RAG (Retrieval Augmented Generation) HTTP request
 This module provides endpoints for generating HTML content using RAG techniques.
 """
 import logging
+import shutil
 from typing import Dict, Any, List
 from flask import Blueprint, request, jsonify,current_app
 from werkzeug.exceptions import HTTPException
@@ -48,7 +49,7 @@ def generate_content():
         document_dir = data['document_dir']
         course_id = data['course_id']
         user_id = data['user_id']
-        
+      #so you are the problem   
         output_dir = Path(current_app.config['UPLOAD_FOLDER']) / course_id / user_id / 'generated'
         
         # Get topic IDs for the course

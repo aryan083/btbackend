@@ -63,45 +63,33 @@ class RAGGenerationService:
     @property
     def embedding_model(self):
         """
-        Lazy load the embedding model from local directory.
-        If the model doesn't exist or is incomplete, it will be downloaded.
+        Lazy load the embedding model directly from the internet.
+        
+        This property initializes the SentenceTransformer model for generating embeddings
+        only when needed, avoiding unnecessary memory usage until required.
         
         Returns:
-            The initialized embedding model
+            SentenceTransformer: The initialized embedding model ready for generating text embeddings
+            
+        Raises:
+            RuntimeError: If there's an issue loading the model from the internet
         """
         if self._embedding_model is None:
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2') 
-            
             try:
-                # Try to load the model if it exists
-                if os.path.exists(model_path):
-                    try:
-                        self._embedding_model = SentenceTransformer(model_path)
-                        # Verify model is loaded correctly by encoding a test string
-                        self._embedding_model.encode("test")
-                        logger.info(f"Successfully loaded model from {model_path}")
-                        return self._embedding_model
-                    except Exception as e:
-                        logger.warning(f"Failed to load existing model: {str(e)}")
-                        # If loading fails, delete the incomplete/corrupted model directory
-                        import shutil
-                        shutil.rmtree(model_path, ignore_errors=True)
-                        logger.info(f"Removed incomplete model directory: {model_path}")
+                logger.info("Loading embedding model from internet")
+                # Use a timeout to prevent hanging if network is slow
+                self._embedding_model = SentenceTransformer('all-mpnet-base-v2', device='cpu')
                 
-                # Download fresh copy of the model
-                logger.info(f"Downloading model to {model_path}")
-                self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
-                
-                # Verify the model works before saving
-                self._embedding_model.encode("test")
-                
-                # Save the verified model
-                self._embedding_model.save(model_path)
-                logger.info(f"Model downloaded and saved to {model_path}")
-                
+                # Verify model is loaded correctly by encoding a test string
+                test_embedding = self._embedding_model.encode("test")
+                if test_embedding is None or len(test_embedding) == 0:
+                    raise ValueError("Model returned empty embeddings during validation")
+                    
+                logger.info("Successfully loaded embedding model from internet")
             except Exception as e:
                 logger.error(f"Error initializing embedding model: {str(e)}")
-                raise
+                # Provide more context in the error message
+                raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
                 
         return self._embedding_model
 
@@ -892,48 +880,7 @@ class RAGGenerationService:
             logger.error(f"Error in bulk article save: {str(e)}")
             result["articles"]["errors"].append(str(e))
             return result
-            
-    @custom_logger.log_function_call
-    def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
-        """
-        Update topic's articles_json field with new article ID using atomic update.
         
-        Args:
-            topic_id (str): ID of the topic
-            article_id (str): ID of the article to add
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        try:
-            # Use PostgreSQL's jsonb_array_append function
-            update_query = """
-            UPDATE topics 
-            SET articles_json = 
-                COALESCE(articles_json, '[]'::jsonb) || jsonb_build_array(%(article_id)s)
-            WHERE topic_id = %(topic_id)s
-            """
-            
-            # Execute raw SQL
-            response = self.supabase_client.rpc('execute', {
-                "query": update_query,
-                "params": {
-                    "article_id": article_id,
-                    "topic_id": topic_id
-                }
-            }).execute()
-            
-            # Check affected rows
-            if response.data and response.data[0]['affected_rows'] > 0:
-                logger.info(f"Updated topic {topic_id} with article {article_id}")
-                return True
-            
-            logger.error(f"No rows affected for topic {topic_id}")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Topic update error: {str(e)}")
-            return False
 
     @custom_logger.log_function_call
     def _clean_html_content(self, content: str) -> str:
