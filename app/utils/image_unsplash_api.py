@@ -357,7 +357,7 @@ def unsplash_api_fetcher(course_id: str):
                             # Add to batch for bulk update with both title and image
                             article_updates.append({
                                 "article_id": article_id,
-                                "title": new_title,
+                                "article_name": new_title,
                                 "content_img": unsplash_link
                             })
                             success_count += 1

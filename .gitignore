@@ -14,3 +14,5 @@ app/all-mpnet-base-v2
 app/all-mpnet-base-v2/
 /app/all-mpnet-base-v2
 *.pdf
+app/all-mpnet-base-v2/vocab.txt
+app/all-mpnet-base-v2/tokenizer.json
