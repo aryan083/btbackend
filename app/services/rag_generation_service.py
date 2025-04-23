@@ -63,7 +63,10 @@ class RAGGenerationService:
     @property
     def embedding_model(self):
         """
-        Lazy load the embedding model directly from the internet.
+        Load the embedding model, with fallback mechanisms:
+        1. Try to load from local cache directory first
+        2. If not found locally, download from internet and save locally
+        3. If download fails, attempt to use a previously downloaded version
         
         This property initializes the SentenceTransformer model for generating embeddings
         only when needed, avoiding unnecessary memory usage until required.
@@ -72,23 +75,64 @@ class RAGGenerationService:
             SentenceTransformer: The initialized embedding model ready for generating text embeddings
             
         Raises:
-            RuntimeError: If there's an issue loading the model from the internet
+            RuntimeError: If there's an issue loading the model from any source
         """
         if self._embedding_model is None:
+            # Define model name and local cache directory
+            model_name = 'all-mpnet-base-v2'
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
+            os.makedirs(cache_dir, exist_ok=True)
+            model_path = os.path.join(cache_dir, model_name)
+            
+            # Try loading from local cache first
+            if os.path.exists(model_path):
+                try:
+                    logger.info(f"Loading embedding model from local cache: {model_path}")
+                    self._embedding_model = SentenceTransformer(model_path, device='cpu')
+                    
+                    # Verify model is loaded correctly
+                    test_embedding = self._embedding_model.encode("test")
+                    if test_embedding is not None and len(test_embedding) > 0:
+                        logger.info("Successfully loaded embedding model from local cache")
+                        return self._embedding_model
+                    else:
+                        logger.warning("Local model returned empty embeddings, will try downloading fresh copy")
+                except Exception as e:
+                    logger.warning(f"Error loading model from local cache: {str(e)}. Will try downloading.")
+            
+            # If local loading failed or model doesn't exist locally, try downloading
             try:
-                logger.info("Loading embedding model from internet")
-                # Use a timeout to prevent hanging if network is slow
-                self._embedding_model = SentenceTransformer('all-mpnet-base-v2', device='cpu')
+                logger.info("Downloading embedding model from internet")
+                # Download with cache_folder parameter to save locally
+                self._embedding_model = SentenceTransformer(model_name, device='cpu', cache_folder=cache_dir)
                 
-                # Verify model is loaded correctly by encoding a test string
+                # Verify model is loaded correctly
                 test_embedding = self._embedding_model.encode("test")
                 if test_embedding is None or len(test_embedding) == 0:
                     raise ValueError("Model returned empty embeddings during validation")
                     
-                logger.info("Successfully loaded embedding model from internet")
+                logger.info(f"Successfully downloaded and cached embedding model to {model_path}")
             except Exception as e:
-                logger.error(f"Error initializing embedding model: {str(e)}")
-                # Provide more context in the error message
+                logger.error(f"Error downloading embedding model: {str(e)}")
+                # Last resort: try to find any previously downloaded model files
+                try:
+                    # Look for any partial downloads or previous versions
+                    if os.path.exists(cache_dir):
+                        model_dirs = [d for d in os.listdir(cache_dir) if os.path.isdir(os.path.join(cache_dir, d))]
+                        if model_dirs:
+                            fallback_path = os.path.join(cache_dir, model_dirs[0])
+                            logger.warning(f"Attempting to load fallback model from: {fallback_path}")
+                            self._embedding_model = SentenceTransformer(fallback_path, device='cpu')
+                            
+                            # Verify fallback model
+                            test_embedding = self._embedding_model.encode("test")
+                            if test_embedding is not None and len(test_embedding) > 0:
+                                logger.info("Successfully loaded fallback embedding model")
+                                return self._embedding_model
+                except Exception as fallback_error:
+                    logger.error(f"Fallback loading also failed: {str(fallback_error)}")
+                
+                # If we get here, all attempts have failed
                 raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
                 
         return self._embedding_model
