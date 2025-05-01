@@ -345,9 +345,10 @@ class RAGGenerationService:
             max_results (int): Maximum number of results
             
         Returns:
-            str: Retrieved context
+            str: Retrieved context formatted with source tags
         """
         try:
+            # First try vector search
             response = self.supabase_client.rpc('match_documents', {
                 'query_embedding': query_embedding,
                 'match_threshold': match_threshold,
@@ -355,26 +356,34 @@ class RAGGenerationService:
                 'course_filter': course_id
             }).execute()
 
-            # Log the response data
-            logger.info(f"Vector search response: {response.data}")
+            # Format context data consistently
+            def format_context(data):
+                if not data:
+                    return ""
+                if isinstance(data, list):
+                    return "\n".join(
+                        f"<source>{r.get('content', '')}</source>"                    
+                        for r in data
+                    )
+                return ""
 
-
-            if response.data==None or response.data==[] or response.data=={} or response.data==['']:
+            # If vector search returns no results, fall back to material_text
+            if not response.data:
+                logger.info("Vector search returned no results, falling back to material_text")
                 response = self.supabase_client.table('material_text').select('*').match('course_id', course_id).execute()
-                # logger.info(f"Material text response: {response.data}")
-                logger.info("FIND DATATATATATATATTATATAATATTAT",response.data)
-                return response.data
-            if response.data:
-                return "\n".join(
-                    f"<source>{r.get('content', '')}</source>"                    
-                    for r in response.data
-                )
-            return "\n".join(
-                    f"<source>{r.get('content', '')}</source>"                    
-                    for r in response.data
-                )
+                
+                if not response.data:
+                    logger.warning(f"No material found for course_id: {course_id}")
+                    return ""
+                
+                # Format the material_text data consistently
+                return format_context(response.data)
+            
+            # Format vector search results
+            return format_context(response.data)
+
         except Exception as e:
-            logger.warning(f"Vector search failed: {str(e)}")
+            logger.error(f"Context retrieval failed: {str(e)}")
             return ""
 
     @custom_logger.log_function_call
@@ -1010,7 +1019,7 @@ class RAGGenerationService:
         Returns:
             str: Generation prompt
         """
-         # Skill level description
+        # Skill level description
         skill_desc = self._get_skill_description(skill_level)
         skill_section = f"**Target Audience**: {skill_desc}." if skill_desc else ""
 
@@ -1020,68 +1029,65 @@ class RAGGenerationService:
         # Image policy
         image_policy = ("- STRICTLY NO IMAGES ALLOWED" if not allow_images 
                         else "- Include relevant <figure> elements with proper <figcaption>")
-# - Minimum 3 code samples in <pre><code> blocks
-        logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code}  )")
-        logger.info(f"Context: {context}")
+
+        logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code})")
+        logger.info(f"Context length: {len(context) if context else 0}")
+
+        # Base prompt structure
+        base_prompt = f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
+        Use 100% of available token capacity for maximum depth and quality. {skill_section}
+
+        **Mandatory Structure:**
+        1. <h1>Single Title</h1> (Only one H1 heading at beginning)
+        2. Table of Contents (Linked to section IDs)
+        3. Comprehensive Definition Section with Etymology
+        4. Technical Deep Dive with Mathematical Notation (if applicable)
+        5. Implementation Examples:
         
-        if context == "":
-            return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
-            Use 100% of available token capacity for maximum depth and quality. {skill_section}
+        - Error handling examples
+        6. Comparative Analysis Table:
+        <table class="comparative">
+            <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
+            <tbody>...</tbody>
+        </table>
+        7. Best Practices & Anti-Patterns
+        8. Security Considerations
+        9. Performance Characteristics
+        10. Cross-References to Related Concepts
 
-            **Mandatory Structure:**
-            1. <h1>Single Title</h1> (Only one H1 heading at beginning)
-            2. Table of Contents (Linked to section IDs)
-            3. Comprehensive Definition Section with Etymology
-            4. Technical Deep Dive with Mathematical Notation (if applicable)
-            5. Implementation Examples:
-            
-            - Error handling examples
-            6. Comparative Analysis Table:
-            <table class="comparative">
-                <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
-                <tbody>...</tbody>
-            </table>
-            7. Best Practices & Anti-Patterns
-            8. Security Considerations
-            9. Performance Characteristics
-            10. Cross-References to Related Concepts
+        **Quality Requirements:**
+        - PhD-level technical depth prioritized
+        - All claims must be backed by context or examples
+        - No filler content - maximize information density
+        - Strict technical accuracy over readability
+        - Include industry-specific terminology
+        - No token preservation - use full capacity
 
-            **Context Materials:**
-            {context}
+        **HTML Requirements:**
+        - Only <body> content allowed (no head/styles)
+        - Semantic HTML5 elements required (article, section, etc.)
+        - Tables must use proper <thead>/<tbody> structure
+        - Code samples require syntax highlighting hints and must have word wrapping to fit display
+        - External links open in new tab
+        - All sections must have ID attributes
+        - No markdown - only pure HTML
+        - Error handling examples in red bordered divs
 
-            **Quality Requirements:**
-            - PhD-level technical depth prioritized
-            - All claims must be backed by context or examples
-            - No filler content - maximize information density
-            - Strict technical accuracy over readability
-            - Include industry-specific terminology
-            - No token preservation - use full capacity
+        **Special Instructions:**
+        {teaching_instructions}
+        {user_prompt}
 
-            **HTML Requirements:**
-            - Only <body> content allowed (no head/styles)
-            - Semantic HTML5 elements required (article, section, etc.)
-            - Tables must use proper <thead>/<tbody> structure
-            - Code samples require syntax highlighting hints and must have word wrapping to fit display
-            - External links open in new tab
-            - All sections must have ID attributes
-            - No markdown - only pure HTML
-            - Error handling examples in red bordered divs
+        **Prohibitions:**
+        - No "Note:" or "Tip:" boxes
+        - No colloquial language
+        - No placeholder comments
+        - No unfinished sections
+        - No markdown formatting
+        - No duplicated content"""
 
-            **Special Instructions:**
-            If the gethered content from the context is not relevant to the subtopic, then just return "No relevant content found", do not generate any content.
-            strictly follow this instruction at any cost.
-            {teaching_instructions}
-            {user_prompt}
-
-            **Prohibitions:**
-            - No "Note:" or "Tip:" boxes
-            - No colloquial language
-            - No placeholder comments
-            - No unfinished sections
-            - No markdown formatting
-            - No duplicated content
-
-            Output MUST use 100% of available tokens while maintaining technical precision."""
-            
+        # Add context if available
+        if context and context.strip():
+            return f"{base_prompt}\n\n**Context Materials:**\n{context}\n\nOutput MUST use 100% of available tokens while maintaining technical precision."
         else:
-            return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."
+            logger.warning(f"No context available for {subtopic_name} ({subtopic_code})")
+            return f"{base_prompt}\n\n**Note: No context materials available. Generate content based on general knowledge.**\n\nOutput MUST use 100% of available tokens while maintaining technical precision."

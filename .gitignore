@@ -1,3 +1,4 @@
+
 # Ignore specific files
 .env
 .windsurfrules
@@ -17,6 +18,6 @@ app/all-mpnet-base-v2/tokenizer.json
 
 # Ignore all files in testitems folder
 testitems/
-
+models/
 # Ignore all PDF files in the testitems folder
 testitems/*.pdf
