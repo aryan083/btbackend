@@ -50,8 +50,7 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
     try:
         # No need for artificial delay
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time
-        time.sleep(10)
+        
         # Verify user access
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -129,8 +128,7 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
         # No need for artificial delay
         # Initialize Supabase client
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time
-        time.sleep(10)
+        
         # First, verify user has access to this course
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -225,8 +223,7 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
     try:
         # No need for artificial delay
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time
-        time.sleep(10)
+        
         # Get course data
         course_response = supabase.table('courses')\
             .select('course_name, skill_level, teaching_pattern, user_prompt, created_at')\
@@ -264,8 +261,6 @@ def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
     try:
         # Initialize Supabase client using Config values
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time
-        time.sleep(10)
         #articles doesn't have column for course_id it has metadata json with course_id so see in the metadata_json for article_id
         articles_response = supabase.table('articles')\
             .select('*')\

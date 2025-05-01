@@ -188,6 +188,9 @@ def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) ->
 @custom_logger.log_function_call
 def upload_and_process_pdf():
     try:
+        logger.info("Starting upload and process PDF")
+        import time
+        time.sleep(10)
         # Get required parameters
         if 'file' not in request.files:
             return jsonify({

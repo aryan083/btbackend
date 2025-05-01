@@ -149,11 +149,7 @@ def run_production_server():
     """Run the production server based on the operating system"""
     try:
         app = create_app()
-        CORS(app, resources={
-        r"/api/*": {
-            "origins": ["https://booktube-opal.vercel.app", "http://localhost:5173"]
-        }
-        })
+        
         
         if sys.platform == 'win32':
             # Windows: Use waitress
@@ -203,6 +199,6 @@ def run_production_server():
         custom_logger.logger.error(f"Failed to start production server: {str(e)}")
         sys.exit(1)
 
-# if __name__ == '__main__':
-#     setup_logging()
-#     run_development_server()
+if __name__ == '__main__':
+    setup_logging()
+    run_development_server()

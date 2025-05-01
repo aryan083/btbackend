@@ -7,6 +7,8 @@ from requests.auth import HTTPBasicAuth
 from app.config import Config
 import logging
 from run import custom_logger
+from pydantic import BaseModel
+from typing import List, Optional
 
 from app.utils.course_utils import get_course_articles
 from app.utils.supabase_utils import bulk_update
@@ -93,7 +95,7 @@ def init_supabase():
 #         raise
 
 @custom_logger.log_function_call
-def get_image_query(client, article_content):
+def get_image_query(client, article_content: str) -> Optional[str]:
     """
     Generate image search query from article content
     
@@ -108,17 +110,42 @@ def get_image_query(client, article_content):
         if not article_content:
             raise ValueError("Article content is required")
             
-        prompt = """Generate a two to three word summary that can be used to query a relevant thumbnail image from the Unsplash API for the given content. 
-        The output should be descriptive and focused on visually representing the concept in a way that aligns with themes when applicable. 
-        Avoid literal interpretations that may return unrelated results. 
-        Do not use any formatting or special characters in the output—only return the words."""
+        prompt = """Analyze the following article content and generate a two to three word summary that can be used to query a relevant thumbnail image from the Unsplash API.
+        The output should be descriptive and focused on visually representing the concept.
+        Return ONLY the search query words, nothing else.
         
-        response = client.generate_content([prompt, article_content])
-        return response.text.strip()
+        Article content:
+        {content}
+        """.format(content=article_content)
+        
+        response = client.generate_content(
+            contents=[prompt],
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 1024,
+            }
+        )
+        
+        if not response.text:
+            logger.error("Empty response from Gemini for image query")
+            return None
+            
+        # Clean the response to get just the search query
+        query = response.text.strip()
+        # Remove any markdown formatting or quotes
+        query = query.replace('"', '').replace('*', '').replace('#', '').strip()
+        # If multiple lines, take the first one
+        if '\n' in query:
+            query = query.split('\n')[0].strip()
+            
+        logger.info(f"Generated image query: {query}")
+        return query
         
     except Exception as e:
         logger.error(f"Failed to generate image query: {str(e)}")
-        raise
+        return None
 
 @custom_logger.log_function_call
 def query_unsplash(query, num_images=1):
@@ -296,6 +323,64 @@ def bulk_append_links_in_supabase(supabase, article_updates):
         logger.error(f"Failed to bulk update articles in Supabase: {str(e)}")
         return {"success_count": 0, "errors": [str(e)]}
 
+class ArticleTitle(BaseModel):
+    title: str
+    keywords: List[str]
+
+@custom_logger.log_function_call
+def generate_article_title(client, content: str) -> Optional[str]:
+    """
+    Generate an engaging and SEO-friendly title for an article using Gemini.
+    
+    Args:
+        client: Gemini AI client
+        content (str): Article content to analyze
+        
+    Returns:
+        Optional[str]: Generated title or None if generation fails
+    """
+    try:
+        if not content:
+            raise ValueError("Article content is required")
+            
+        prompt = """Generate an engaging and SEO-friendly title for the following article content.
+        The title should be 8-12 words long and include relevant keywords.
+        Make it attention-grabbing while maintaining accuracy.
+        Return ONLY the title text, nothing else.
+        
+        Article content:
+        {content}
+        """.format(content=content)
+        
+        response = client.generate_content(
+            contents=[prompt],
+            generation_config={
+                "temperature": 0.7,
+                "top_p": 0.8,
+                "top_k": 40,
+                "max_output_tokens": 1024,
+            }
+        )
+        
+        if not response.text:
+            logger.error("Empty response from Gemini for title")
+            return None
+            
+        # Clean the response to get just the title
+        title = response.text.strip()
+        # Remove any markdown formatting or quotes
+        title = title.replace('"', '').replace('*', '').replace('#', '').strip()
+        # If multiple lines, take the first one
+        if '\n' in title:
+            title = title.split('\n')[0].strip()
+            
+        logger.info(f"Generated title: {title}")
+        return title
+            
+    except Exception as e:
+        logger.error(f"Failed to generate article title: {str(e)}")
+        return None
+
 @custom_logger.log_function_call
 def unsplash_api_fetcher(course_id: str):
     """
@@ -304,12 +389,11 @@ def unsplash_api_fetcher(course_id: str):
     Args:
         course_id (str): ID of the course to process 
     """
-    # Set up logging first
-    
     try:
         # Initialize clients
         supabase = init_supabase()
         client = init_gemini()
+        
         # Get all articles for the course in a single query
         response = get_course_articles(course_id)
 
@@ -322,7 +406,7 @@ def unsplash_api_fetcher(course_id: str):
         article_updates = []
         
         for article in response:
-            article_id = None  # Ensure article_id is defined
+            article_id = None
             try:
                 # Unpack tuple if necessary
                 if isinstance(article, tuple):
@@ -337,35 +421,29 @@ def unsplash_api_fetcher(course_id: str):
 
                 # Generate and apply image and title
                 query = get_image_query(client, content)
-                if unsplash_link := query_unsplash(query):
-                    # Generate title using Gemini
-                    title_prompt = """Generate an engaging and SEO-friendly title for this article that captures its essence based on the content and it should be catchy.
-                    The title should be 8-12 words long and include relevant keywords.
-                    Make it attention-grabbing while maintaining accuracy."""
+                if not query:
+                    logger.warning(f"Failed to generate image query for article {article_id}")
+                    continue
                     
-                    try:
-                        title_response = client.generate_content([title_prompt, content])
-                        # Extract just the first title from response and clean it
-                        new_title = title_response.text.strip()
-                        # Remove any markdown formatting or quotes that might be in the title
-                        new_title = new_title.replace('"', '').replace('*', '').replace('#', '').strip()
-                        # If multiple lines, just take the first one
-                        if '\n' in new_title:
-                            new_title = new_title.split('\n')[0].strip()
-                        
-                        if new_title:
-                            # Add to batch for bulk update with both title and image
-                            article_updates.append({
-                                "article_id": article_id,
-                                "article_name": new_title,
-                                "content_img": unsplash_link
-                            })
-                            success_count += 1
-                            logger.info(f"Prepared update for {article_id} with title: {new_title}")
-                            
-                    except Exception as e:
-                        logger.error(f"Error generating title for article {article_id}: {str(e)}")
-                        continue
+                unsplash_link = query_unsplash(query)
+                if not unsplash_link:
+                    logger.warning(f"Failed to get image for article {article_id}")
+                    continue
+                    
+                # Generate title
+                new_title = generate_article_title(client, content)
+                if not new_title:
+                    logger.warning(f"Failed to generate title for article {article_id}")
+                    continue
+                    
+                # Add to batch for bulk update
+                article_updates.append({
+                    "article_id": article_id,
+                    "article_name": new_title,
+                    "content_img": unsplash_link
+                })
+                success_count += 1
+                logger.info(f"Prepared update for {article_id} with title: {new_title} and image: {unsplash_link}")
 
             except Exception as e:
                 logger.error(f"Failed article {article_id}: {str(e)}")
@@ -373,35 +451,25 @@ def unsplash_api_fetcher(course_id: str):
         
         # Perform bulk update if we have updates
         if article_updates:
-            # Format updates for bulk operation with both title and content_img
-            formatted_updates = [
-                {
-                    "article_id": update["article_id"],
-                    "title": update["title"],
-                    "content_img": update["content_img"]
-                }
-                for update in article_updates
-            ]
-            
-            # Perform bulk update with correct ID field parameter
-            result = bulk_update(
-                supabase,
-                "articles",
-                formatted_updates,
-                "article_id"  # Specify the correct ID field
-            )
-            
-            if result["success_count"] > 0:
-                logger.info(f"Successfully updated {result['success_count']} articles with titles and images")
-            else:
-                logger.error("No articles were updated - Check if article_id exists and is valid")
-            
-            if result.get("errors"):
-                for error in result["errors"]:
-                    logger.error(f"Bulk update error: {error}")
-                    
-            # Log the actual data we tried to update for debugging
-            logger.info(f"Attempted to update {len(formatted_updates)} articles with data structure: {formatted_updates[0] if formatted_updates else 'No updates'}")
+            try:
+                result = bulk_update(
+                    supabase,
+                    "articles",
+                    article_updates,
+                    "article_id"
+                )
+                
+                if result["success_count"] > 0:
+                    logger.info(f"Successfully updated {result['success_count']} articles with titles and images")
+                else:
+                    logger.error("No articles were updated - Check if article_id exists and is valid")
+                
+                if result.get("errors"):
+                    for error in result["errors"]:
+                        logger.error(f"Bulk update error: {error}")
+                        
+            except Exception as e:
+                logger.error(f"Failed to perform bulk update: {str(e)}")
 
         logger.info(f"Processed {len(response)} articles | {success_count} successes")
 

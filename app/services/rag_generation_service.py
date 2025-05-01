@@ -175,7 +175,7 @@ class RAGGenerationService:
         document_dir: str,
         course_id: str,
         output_dir: str,
-        match_threshold: float = 0.7,
+        match_threshold: float = 0.3,
         max_results: int = 5,
         user_prompt: str = "",
         teaching_pattern: Union[str, List[str]] = "",
@@ -359,17 +359,20 @@ class RAGGenerationService:
             logger.info(f"Vector search response: {response.data}")
 
 
-            if response.data==None:
+            if response.data==None or response.data==[] or response.data=={} or response.data==['']:
                 response = self.supabase_client.table('material_text').select('*').match('course_id', course_id).execute()
                 # logger.info(f"Material text response: {response.data}")
-                logger.info("FIND DATATATATATATATTATATAATATTAT")
+                logger.info("FIND DATATATATATATATTATATAATATTAT",response.data)
                 return response.data
             if response.data:
                 return "\n".join(
                     f"<source>{r.get('content', '')}</source>"                    
                     for r in response.data
                 )
-            return ""
+            return "\n".join(
+                    f"<source>{r.get('content', '')}</source>"                    
+                    for r in response.data
+                )
         except Exception as e:
             logger.warning(f"Vector search failed: {str(e)}")
             return ""
@@ -1021,7 +1024,7 @@ class RAGGenerationService:
         logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code}  )")
         logger.info(f"Context: {context}")
         
-        if context =="":
+        if context == "":
             return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
             Use 100% of available token capacity for maximum depth and quality. {skill_section}
 
@@ -1068,7 +1071,6 @@ class RAGGenerationService:
             If the gethered content from the context is not relevant to the subtopic, then just return "No relevant content found", do not generate any content.
             strictly follow this instruction at any cost.
             {teaching_instructions}
-            {image_policy}
             {user_prompt}
 
             **Prohibitions:**

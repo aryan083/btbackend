@@ -61,7 +61,7 @@ def create_course():
 
 
 @custom_logger.log_function_call
-@course_bp.route('/send_pdf_to_gemini', methods=['POST'])
+@course_bp.route('/send_pdf_to_gemini', methods=['POST']) 
 def send_pdf_to_gemini():
     """
     Send PDF content directly to Gemini API for analysis
