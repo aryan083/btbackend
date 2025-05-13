@@ -15,6 +15,7 @@ import google.generativeai as genai
 from supabase import create_client, Client
 from sentence_transformers import SentenceTransformer
 from run import custom_logger
+from app.utils.supabase_utils import bulk_insert, bulk_update, bulk_upsert
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -62,45 +63,77 @@ class RAGGenerationService:
     @property
     def embedding_model(self):
         """
-        Lazy load the embedding model from local directory.
-        If the model doesn't exist or is incomplete, it will be downloaded.
+        Load the embedding model, with fallback mechanisms:
+        1. Try to load from local cache directory first
+        2. If not found locally, download from internet and save locally
+        3. If download fails, attempt to use a previously downloaded version
+        
+        This property initializes the SentenceTransformer model for generating embeddings
+        only when needed, avoiding unnecessary memory usage until required.
         
         Returns:
-            The initialized embedding model
+            SentenceTransformer: The initialized embedding model ready for generating text embeddings
+            
+        Raises:
+            RuntimeError: If there's an issue loading the model from any source
         """
         if self._embedding_model is None:
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'all-mpnet-base-v2')
+            # Define model name and local cache directory
+            model_name = 'all-mpnet-base-v2'
+            cache_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'models')
+            os.makedirs(cache_dir, exist_ok=True)
+            model_path = os.path.join(cache_dir, model_name)
             
-            try:
-                # Try to load the model if it exists
-                if os.path.exists(model_path):
-                    try:
-                        self._embedding_model = SentenceTransformer(model_path)
-                        # Verify model is loaded correctly by encoding a test string
-                        self._embedding_model.encode("test")
-                        logger.info(f"Successfully loaded model from {model_path}")
+            # Try loading from local cache first
+            if os.path.exists(model_path):
+                try:
+                    logger.info(f"Loading embedding model from local cache: {model_path}")
+                    self._embedding_model = SentenceTransformer(model_path, device='cpu')
+                    
+                    # Verify model is loaded correctly
+                    test_embedding = self._embedding_model.encode("test")
+                    if test_embedding is not None and len(test_embedding) > 0:
+                        logger.info("Successfully loaded embedding model from local cache")
                         return self._embedding_model
-                    except Exception as e:
-                        logger.warning(f"Failed to load existing model: {str(e)}")
-                        # If loading fails, delete the incomplete/corrupted model directory
-                        import shutil
-                        shutil.rmtree(model_path, ignore_errors=True)
-                        logger.info(f"Removed incomplete model directory: {model_path}")
+                    else:
+                        logger.warning("Local model returned empty embeddings, will try downloading fresh copy")
+                except Exception as e:
+                    logger.warning(f"Error loading model from local cache: {str(e)}. Will try downloading.")
+            
+            # If local loading failed or model doesn't exist locally, try downloading
+            try:
+                logger.info("Downloading embedding model from internet")
+                # Download with cache_folder parameter to save locally
+                self._embedding_model = SentenceTransformer(model_name, device='cpu', cache_folder=cache_dir)
                 
-                # Download fresh copy of the model
-                logger.info(f"Downloading model to {model_path}")
-                self._embedding_model = SentenceTransformer('all-mpnet-base-v2')
-                
-                # Verify the model works before saving
-                self._embedding_model.encode("test")
-                
-                # Save the verified model
-                self._embedding_model.save(model_path)
-                logger.info(f"Model downloaded and saved to {model_path}")
-                
+                # Verify model is loaded correctly
+                test_embedding = self._embedding_model.encode("test")
+                if test_embedding is None or len(test_embedding) == 0:
+                    raise ValueError("Model returned empty embeddings during validation")
+                    
+                logger.info(f"Successfully downloaded and cached embedding model to {model_path}")
             except Exception as e:
-                logger.error(f"Error initializing embedding model: {str(e)}")
-                raise
+                logger.error(f"Error downloading embedding model: {str(e)}")
+                # Last resort: try to find any previously downloaded model files
+                try:
+                    # Look for any partial downloads or previous versions
+                    if os.path.exists(cache_dir):
+                        model_dirs = [d for d in os.listdir(cache_dir) if os.path.isdir(os.path.join(cache_dir, d))]
+                        if model_dirs:
+                            fallback_path = os.path.join(cache_dir, model_dirs[0])
+                            logger.warning(f"Attempting to load fallback model from: {fallback_path}")
+                            self._embedding_model = SentenceTransformer(fallback_path, device='cpu')
+                            
+                            # Verify fallback model
+                            test_embedding = self._embedding_model.encode("test")
+                            if test_embedding is not None and len(test_embedding) > 0:
+                                logger.info("Successfully loaded fallback embedding model")
+                                return self._embedding_model
+                except Exception as fallback_error:
+                    logger.error(f"Fallback loading also failed: {str(fallback_error)}")
+                
+                # If we get here, all attempts have failed
+                raise RuntimeError(f"Failed to initialize embedding model: {str(e)}") from e
                 
         return self._embedding_model
 
@@ -181,6 +214,10 @@ class RAGGenerationService:
             generated_files = {}
             generated_articles = []
             errors = []
+            
+            # Collect all articles for bulk insert
+            articles_to_insert = []
+            topic_updates = []
 
             for chapter_name, chapter_data in course_structure["Chapters"].items():
                 if not isinstance(chapter_data, dict):
@@ -217,38 +254,65 @@ class RAGGenerationService:
                         with open(filepath, 'w', encoding='utf-8') as f:
                             f.write(content)
                         
-                        # Save article to Supabase
-                        article_id = self._save_article_to_supabase(
-                            course_id=course_id,
-                            chapter_name=chapter_name,
-                            subtopic_code=subtopic_code,
-                            subtopic_name=subtopic_name,
-                            content=content,
-                            filepath=filepath,
-                            user_id=user_id,
-                            skill_level=skill_level,
-                            teaching_pattern=teaching_pattern,
-                            topic_metadata=topic_metadata
-                        )
-                        
-                        if article_id:
-                            generated_articles.append({
-                                "article_id": article_id,
-                                "article_name": f"{subtopic_name} - {subtopic_code}",
-                                "filepath": filepath,
-                                "topic_id": topic_metadata.get(subtopic_name) if topic_metadata else None
-                            })
-                            generated_files[filepath] = content
-                            logger.info(f"Created and saved article: {filepath}")
-                        else:
-                            error_msg = f"Failed to save article for {subtopic_code}"
+                        # Find topic_id from metadata
+                        topic_id = topic_metadata.get(subtopic_name) if topic_metadata else None
+                        if not topic_id:
+                            error_msg = f"No topic ID found for subtopic: {subtopic_name}"
                             errors.append(error_msg)
                             logger.error(error_msg)
+                            continue
+                        
+                        # Create article record for bulk insert
+                        article_data = {
+                            "article_name": f"{subtopic_name} - {subtopic_code}",
+                            "tags": {
+                                "course_id": course_id,
+                                "chapter_name": chapter_name,
+                                "subtopic_code": subtopic_code,
+                                "skill_level": skill_level,
+                                "teaching_pattern": teaching_pattern
+                            },
+                            "content_text": content,
+                            "topic_id": topic_id,
+                            "is_completed": False,
+                            "user_id": user_id if user_id else None
+                        }
+                        
+                        articles_to_insert.append(article_data)
+                        generated_files[filepath] = content
+                        
+                        # Prepare topic update
+                        topic_updates.append({
+                            "topic_id": topic_id,
+                            "articles_json": {"article_ids": []}  # Will be populated after insert
+                        })
 
                     except Exception as subtopic_error:
                         error_msg = f"Failed {subtopic_code}: {str(subtopic_error)}"
                         errors.append(error_msg)
                         logger.error(error_msg)
+            
+            # Perform bulk insert for all articles
+            if articles_to_insert:
+                bulk_result = self._save_articles_bulk(articles_to_insert, topic_updates)
+                
+                # Process results
+                if bulk_result["articles"]["success_count"] > 0:
+                    # Map article IDs to topics
+                    article_ids = bulk_result["articles"]["article_ids"]
+                    for i, article_id in enumerate(article_ids):
+                        if i < len(topic_updates):
+                            topic_id = topic_updates[i]["topic_id"]
+                            generated_articles.append({
+                                "article_id": article_id,
+                                "article_name": articles_to_insert[i]["article_name"],
+                                "filepath": list(generated_files.keys())[i] if i < len(generated_files) else None,
+                                "topic_id": topic_id
+                            })
+                
+                # Add any errors from bulk operation
+                errors.extend(bulk_result["articles"]["errors"])
+                errors.extend(bulk_result["topics"]["errors"])
 
             return {
                 "files": generated_files,
@@ -281,9 +345,10 @@ class RAGGenerationService:
             max_results (int): Maximum number of results
             
         Returns:
-            str: Retrieved context
+            str: Retrieved context formatted with source tags
         """
         try:
+            # First try vector search
             response = self.supabase_client.rpc('match_documents', {
                 'query_embedding': query_embedding,
                 'match_threshold': match_threshold,
@@ -291,19 +356,34 @@ class RAGGenerationService:
                 'course_filter': course_id
             }).execute()
 
-            # Log the response data
-            logger.info(f"Vector search response: {response.data}")
+            # Format context data consistently
+            def format_context(data):
+                if not data:
+                    return ""
+                if isinstance(data, list):
+                    return "\n".join(
+                        f"<source>{r.get('content', '')}</source>"                    
+                        for r in data
+                    )
+                return ""
 
-            if response.data==None:
-                return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."
-            if response.data:
-                return "\n".join(
-                    f"<source>{r.get('content', '')}</source>" 
-                    for r in response.data[:3]
-                )
-            return ""
+            # If vector search returns no results, fall back to material_text
+            if not response.data:
+                logger.info("Vector search returned no results, falling back to material_text")
+                response = self.supabase_client.table('material_text').select('*').match('course_id', course_id).execute()
+                
+                if not response.data:
+                    logger.warning(f"No material found for course_id: {course_id}")
+                    return ""
+                
+                # Format the material_text data consistently
+                return format_context(response.data)
+            
+            # Format vector search results
+            return format_context(response.data)
+
         except Exception as e:
-            logger.warning(f"Vector search failed: {str(e)}")
+            logger.error(f"Context retrieval failed: {str(e)}")
             return ""
 
     @custom_logger.log_function_call
@@ -444,6 +524,9 @@ class RAGGenerationService:
             logger.warning(f"Text directory not found: {text_dir}")
             return results
 
+        # Collect all records for bulk insert
+        records_to_insert = []
+        
         for text_file in text_dir.glob("*.json"):
             try:
                 with open(text_file, 'r') as f:
@@ -472,14 +555,17 @@ class RAGGenerationService:
                         'summary_vector': embedding
                     }
                     
-                    # Store in database
-                    if self._store_record('material_text', record):
-                        results["processed"] += 1
-                    else:
-                        results["errors"].append(f"Failed to store text record: {chunk_id}")
+                    # Add to batch for bulk insert
+                    records_to_insert.append(record)
                         
             except Exception as e:
                 results["errors"].append(f"Error processing text file {text_file}: {str(e)}")
+        
+        # Perform bulk insert if we have records
+        if records_to_insert:
+            bulk_result = self._store_records_bulk('material_text', records_to_insert)
+            results["processed"] = bulk_result["success_count"]
+            results["errors"].extend(bulk_result["errors"])
                 
         return results
 
@@ -501,6 +587,9 @@ class RAGGenerationService:
         if not image_dir.exists():
             logger.warning(f"Images directory not found: {image_dir}")
             return results
+
+        # Collect all records for bulk insert
+        records_to_insert = []
 
         for image_file in image_dir.glob("*"):
             if image_file.suffix.lower() not in ('.png', '.jpg', '.jpeg'):
@@ -526,14 +615,17 @@ class RAGGenerationService:
                     'summary_vector': embedding
                 }
                 
-                # Store in database
-                if self._store_record('material_image', record):
-                    results["processed"] += 1
-                else:
-                    results["errors"].append(f"Failed to store image record: {chunk_id}")
+                # Add to batch for bulk insert
+                records_to_insert.append(record)
                     
             except Exception as e:
                 results["errors"].append(f"Error processing image {image_file}: {str(e)}")
+                
+        # Perform bulk insert if we have records
+        if records_to_insert:
+            bulk_result = self._store_records_bulk('material_image', records_to_insert)
+            results["processed"] = bulk_result["success_count"]
+            results["errors"].extend(bulk_result["errors"])
                 
         return results
 
@@ -609,11 +701,31 @@ class RAGGenerationService:
             bool: True if successful, False otherwise
         """
         try:
-            self.supabase_client.table(table).insert(data).execute()
-            return True
+            # Use the bulk insert function with a single record
+            result = bulk_insert(self.supabase_client, table, [data])
+            return result["success_count"] > 0
         except Exception as e:
             logger.error(f"Supabase insert error: {e}")
             return False
+            
+    @custom_logger.log_function_call
+    def _store_records_bulk(self, table: str, records: List[Dict[str, Any]], batch_size: int = 100) -> Dict[str, Any]:
+        """
+        Store multiple records in Supabase in bulk.
+        
+        Args:
+            table (str): Table name
+            records (List[Dict[str, Any]]): List of records to store
+            batch_size (int): Number of records to insert in each batch
+            
+        Returns:
+            Dict[str, Any]: Result of the operation with success count and errors
+        """
+        try:
+            return bulk_insert(self.supabase_client, table, records, batch_size)
+        except Exception as e:
+            logger.error(f"Supabase bulk insert error: {e}")
+            return {"success_count": 0, "errors": [str(e)]}
 
     @custom_logger.log_function_call
     def _generate_articles(
@@ -749,14 +861,14 @@ class RAGGenerationService:
                 "user_id": user_id if user_id else None
             }
             
-            # Insert article into Supabase
-            response = self.supabase_client.table("articles").insert(article_data).execute()
+            # Use bulk insert with a single record
+            result = bulk_insert(self.supabase_client, "articles", [article_data])
             
-            if not response.data:
+            if not result["success_count"]:
                 logger.error("Failed to save article: No data returned")
                 return None
                 
-            article_id = response.data[0].get('article_id')
+            article_id = result["data"][0].get('article_id') if result.get("data") else None
             if not article_id:
                 logger.error("No article ID returned from insert")
                 return None
@@ -771,47 +883,60 @@ class RAGGenerationService:
             logger.error(f"Error saving article to Supabase: {str(e)}")
             return None
             
-    @custom_logger.log_function_call
-    def _update_topic_articles(self, topic_id: str, article_id: str) -> bool:
+    def _save_articles_bulk(self, 
+                           articles_data: List[Dict[str, Any]], 
+                           topic_updates: List[Dict[str, Any]] = None) -> Dict[str, Any]:
         """
-        Update topic's articles_json field with new article ID using atomic update.
+        Save multiple articles to Supabase in bulk and optionally update topics.
         
         Args:
-            topic_id (str): ID of the topic
-            article_id (str): ID of the article to add
+            articles_data (List[Dict[str, Any]]): List of article data to save
+            topic_updates (List[Dict[str, Any]], optional): List of topic updates to perform
             
         Returns:
-            bool: True if successful, False otherwise
+            Dict[str, Any]: Result of the operation with success count and errors
         """
+        result = {
+            "articles": {"success_count": 0, "errors": [], "article_ids": []},
+            "topics": {"success_count": 0, "errors": []}
+        }
+        
         try:
-            # Use PostgreSQL's jsonb_array_append function
-            update_query = """
-            UPDATE topics 
-            SET articles_json = 
-                COALESCE(articles_json, '[]'::jsonb) || jsonb_build_array(%(article_id)s)
-            WHERE topic_id = %(topic_id)s
-            """
+            # Clean content for all articles
+            for article in articles_data:
+                if "content_text" in article:
+                    article["content_text"] = self._clean_html_content(article["content_text"])
             
-            # Execute raw SQL
-            response = self.supabase_client.rpc('execute', {
-                "query": update_query,
-                "params": {
-                    "article_id": article_id,
-                    "topic_id": topic_id
-                }
-            }).execute()
+            # Bulk insert articles
+            articles_result = bulk_insert(self.supabase_client, "articles", articles_data)
+            result["articles"]["success_count"] = articles_result["success_count"]
+            result["articles"]["errors"] = articles_result["errors"]
             
-            # Check affected rows
-            if response.data and response.data[0]['affected_rows'] > 0:
-                logger.info(f"Updated topic {topic_id} with article {article_id}")
-                return True
+            # Extract article IDs for topic updates
+            if articles_result.get("data"):
+                result["articles"]["article_ids"] = [
+                    article.get("article_id") for article in articles_result["data"] 
+                    if article.get("article_id")
+                ]
             
-            logger.error(f"No rows affected for topic {topic_id}")
-            return False
+            # Update topics if needed
+            if topic_updates and result["articles"]["article_ids"]:
+                topics_result = bulk_update(
+                    self.supabase_client, 
+                    "topics", 
+                    topic_updates,
+                    id_field="topic_id"
+                )
+                result["topics"]["success_count"] = topics_result["success_count"]
+                result["topics"]["errors"] = topics_result["errors"]
+                
+            return result
             
         except Exception as e:
-            logger.error(f"Topic update error: {str(e)}")
-            return False
+            logger.error(f"Error in bulk article save: {str(e)}")
+            result["articles"]["errors"].append(str(e))
+            return result
+        
 
     @custom_logger.log_function_call
     def _clean_html_content(self, content: str) -> str:
@@ -894,7 +1019,7 @@ class RAGGenerationService:
         Returns:
             str: Generation prompt
         """
-         # Skill level description
+        # Skill level description
         skill_desc = self._get_skill_description(skill_level)
         skill_section = f"**Target Audience**: {skill_desc}." if skill_desc else ""
 
@@ -904,69 +1029,65 @@ class RAGGenerationService:
         # Image policy
         image_policy = ("- STRICTLY NO IMAGES ALLOWED" if not allow_images 
                         else "- Include relevant <figure> elements with proper <figcaption>")
-# - Minimum 3 code samples in <pre><code> blocks
-        logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code}  )")
-        logger.info(f"Context: {context}")
+
+        logger.info(f"Generating prompt for {subtopic_name} ({subtopic_code})")
+        logger.info(f"Context length: {len(context) if context else 0}")
+
+        # Base prompt structure
+        base_prompt = f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
+        Use 100% of available token capacity for maximum depth and quality. {skill_section}
+
+        **Mandatory Structure:**
+        1. <h1>Single Title</h1> (Only one H1 heading at beginning)
+        2. Table of Contents (Linked to section IDs)
+        3. Comprehensive Definition Section with Etymology
+        4. Technical Deep Dive with Mathematical Notation (if applicable)
+        5. Implementation Examples:
         
-        if context =="":
-            return f"""Generate exhaustive professional technical documentation about {subtopic_name} ({subtopic_code}).
-            Use 100% of available token capacity for maximum depth and quality. {skill_section}
+        - Error handling examples
+        6. Comparative Analysis Table:
+        <table class="comparative">
+            <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
+            <tbody>...</tbody>
+        </table>
+        7. Best Practices & Anti-Patterns
+        8. Security Considerations
+        9. Performance Characteristics
+        10. Cross-References to Related Concepts
 
-            **Mandatory Structure:**
-            1. <h1>Single Title</h1> (Only one H1 heading at beginning)
-            2. Table of Contents (Linked to section IDs)
-            3. Comprehensive Definition Section with Etymology
-            4. Technical Deep Dive with Mathematical Notation (if applicable)
-            5. Implementation Examples:
-            
-            - Error handling examples
-            6. Comparative Analysis Table:
-            <table class="comparative">
-                <thead><tr><th>Feature</th><th>Implementation A</th><th>Implementation B</th></tr></thead>
-                <tbody>...</tbody>
-            </table>
-            7. Best Practices & Anti-Patterns
-            8. Security Considerations
-            9. Performance Characteristics
-            10. Cross-References to Related Concepts
+        **Quality Requirements:**
+        - PhD-level technical depth prioritized
+        - All claims must be backed by context or examples
+        - No filler content - maximize information density
+        - Strict technical accuracy over readability
+        - Include industry-specific terminology
+        - No token preservation - use full capacity
 
-            **Context Materials:**
-            {context}
+        **HTML Requirements:**
+        - Only <body> content allowed (no head/styles)
+        - Semantic HTML5 elements required (article, section, etc.)
+        - Tables must use proper <thead>/<tbody> structure
+        - Code samples require syntax highlighting hints and must have word wrapping to fit display
+        - External links open in new tab
+        - All sections must have ID attributes
+        - No markdown - only pure HTML
+        - Error handling examples in red bordered divs
 
-            **Quality Requirements:**
-            - PhD-level technical depth prioritized
-            - All claims must be backed by context or examples
-            - No filler content - maximize information density
-            - Strict technical accuracy over readability
-            - Include industry-specific terminology
-            - No token preservation - use full capacity
+        **Special Instructions:**
+        {teaching_instructions}
+        {user_prompt}
 
-            **HTML Requirements:**
-            - Only <body> content allowed (no head/styles)
-            - Semantic HTML5 elements required (article, section, etc.)
-            - Tables must use proper <thead>/<tbody> structure
-            - Code samples require syntax highlighting hints and must have word wrapping to fit display
-            - External links open in new tab
-            - All sections must have ID attributes
-            - No markdown - only pure HTML
-            - Error handling examples in red bordered divs
+        **Prohibitions:**
+        - No "Note:" or "Tip:" boxes
+        - No colloquial language
+        - No placeholder comments
+        - No unfinished sections
+        - No markdown formatting
+        - No duplicated content"""
 
-            **Special Instructions:**
-            If the gethered content from the context is not relevant to the subtopic, then just return "No relevant content found", do not generate any content.
-            strictly follow this instruction at any cost.
-            {teaching_instructions}
-            {image_policy}
-            {user_prompt}
-
-            **Prohibitions:**
-            - No "Note:" or "Tip:" boxes
-            - No colloquial language
-            - No placeholder comments
-            - No unfinished sections
-            - No markdown formatting
-            - No duplicated content
-
-            Output MUST use 100% of available tokens while maintaining technical precision."""
-            
+        # Add context if available
+        if context and context.strip():
+            return f"{base_prompt}\n\n**Context Materials:**\n{context}\n\nOutput MUST use 100% of available tokens while maintaining technical precision."
         else:
-            return "No relevant content found I'm sorry, I couldn't find any reliable information to answer your query."
+            logger.warning(f"No context available for {subtopic_name} ({subtopic_code})")
+            return f"{base_prompt}\n\n**Note: No context materials available. Generate content based on general knowledge.**\n\nOutput MUST use 100% of available tokens while maintaining technical precision."

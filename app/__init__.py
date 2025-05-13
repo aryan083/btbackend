@@ -23,8 +23,11 @@ def create_app(config_name=None):
     """
     app = Flask(__name__)
     
-    # Enable CORS
-    CORS(app)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": ["https://booktube-opal.vercel.app", "http://localhost:5173"]
+        }
+        })
     
     # Ensure upload directory exists
     upload_dir = Path(app.root_path) / 'static' / 'uploads'

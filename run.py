@@ -8,8 +8,9 @@ import colorlog
 import functools
 import inspect
 import time
-from datetime import datetime
-from app import create_app
+# from datetime import datetime
+from app import create_app  
+from flask_cors import CORS
 
 class CustomLogger:
     """
@@ -149,6 +150,7 @@ def run_production_server():
     try:
         app = create_app()
         
+        
         if sys.platform == 'win32':
             # Windows: Use waitress
             try:
@@ -182,7 +184,8 @@ def run_production_server():
                     'workers': 4,
                     'worker_class': 'uvicorn.workers.UvicornWorker'
                 }
-
+                
+                
                 custom_logger.logger.info("Starting production server with gunicorn...")
                 StandaloneApplication(app, options).run()
                 

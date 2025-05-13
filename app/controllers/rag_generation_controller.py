@@ -3,6 +3,7 @@ Controller module for handling RAG (Retrieval Augmented Generation) HTTP request
 This module provides endpoints for generating HTML content using RAG techniques.
 """
 import logging
+import shutil
 from typing import Dict, Any, List
 from flask import Blueprint, request, jsonify,current_app
 from werkzeug.exceptions import HTTPException
@@ -48,7 +49,7 @@ def generate_content():
         document_dir = data['document_dir']
         course_id = data['course_id']
         user_id = data['user_id']
-        
+      #so you are the problem   
         output_dir = Path(current_app.config['UPLOAD_FOLDER']) / course_id / user_id / 'generated'
         
         # Get topic IDs for the course
@@ -170,6 +171,7 @@ def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) ->
         logger.info(f"Processing images for course ID: {course_id}")
         unsplash_api_fetcher(course_id=course_id)
         
+        
         # Since unsplash_api_fetcher processes all articles for the course,
         # we'll consider all articles as processed
         results["processed"] = len(article_ids)
@@ -186,6 +188,9 @@ def process_article_images(article_ids: List[Dict[str, Any]], course_id: str) ->
 @custom_logger.log_function_call
 def upload_and_process_pdf():
     try:
+        logger.info("Starting upload and process PDF")
+        import time
+        time.sleep(10)
         # Get required parameters
         if 'file' not in request.files:
             return jsonify({
@@ -200,7 +205,13 @@ def upload_and_process_pdf():
         document_type = request.form.get('document_type', 'book')
         document_name = request.form.get('document_name', '')
 
-        document_dir = Path(current_app.config['UPLOAD_FOLDER']) / (document_name or secure_filename(file.filename).rsplit('.', 1)[0])
+        # Create document directory with consistent naming
+        upload_dir = Path(current_app.config['UPLOAD_FOLDER'])
+        # Use document_name if provided, otherwise use filename without extension
+        output_dir = document_name if document_name else secure_filename(file.filename).rsplit('.', 1)[0]
+        # Ensure consistent naming by replacing spaces with underscores
+        output_dir = output_dir.replace(' ', '_')
+        document_dir = Path(upload_dir) / output_dir
 
         # Validate required parameters
         if not all([course_id, user_id]):
@@ -271,7 +282,7 @@ def upload_and_process_pdf():
                 skill_level=skill_level,
                 topic_metadata=topic_metadata,
                 user_id=user_id,
-                allow_images=False 
+                allow_images=False
                 )
                 
                 # Extract article generation results
@@ -286,11 +297,16 @@ def upload_and_process_pdf():
                 
                 # Process images for generated articles
                 image_results = {}
-                if generated_articles:
-                    logger.info(f"Processing images for {len(generated_articles)} articles")
-                    image_results = process_article_images(generated_articles, course_id)
-                    logger.info(f"Image processing results: {image_results}")
+                # if generated_articles:
+                logger.info(f"Processing images for {len(generated_articles)} articles")
+                image_results = process_article_images(generated_articles, course_id)
+                logger.info(f"Image processing results: {image_results}")
                 
+                # Forcefully Delete document directory
+                shutil.rmtree(document_dir, ignore_errors=True)
+                
+                logger.info(f"Deleted document directory: {document_dir}")
+
                 return jsonify({
                     'status': 'success',
                     'file_path': str(file_path),

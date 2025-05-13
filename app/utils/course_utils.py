@@ -1,5 +1,4 @@
 # app/utils/course_utils.py
-
 import logging
 from typing import Dict, List, Any, Optional, TypedDict
 from datetime import datetime
@@ -49,9 +48,9 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
         }
     """
     try:
+        # No need for artificial delay
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time 
-        time.sleep(10)
+        
         # Verify user access
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -78,21 +77,27 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
         chapters_json = course_data.get('chapters_json', {}).get('chapters', [])
         topic_name_to_id = {}
 
-        # Get all topics across all chapters
-        for chapter_id in chapters_json:
-            chapter_response = supabase.table('chapters')\
+        # Get all topics across all chapters in a single query
+        if chapters_json:
+            # First, get all chapter data in a single query
+            chapters_response = supabase.table('chapters')\
                 .select('topics_json')\
-                .eq('chapter_id', chapter_id)\
-                .single()\
+                .in_('chapter_id', chapters_json)\
                 .execute()
             
-            if chapter_response.data:
-                topic_ids = chapter_response.data.get('topics_json', {}).get('topic_ids', [])
-                
+            # Collect all topic IDs
+            all_topic_ids = []
+            for chapter in chapters_response.data:
+                topic_ids = chapter.get('topics_json', {}).get('topic_ids', [])
+                all_topic_ids.extend(topic_ids)
+            
+            # Get all topics in a single query
+            if all_topic_ids:
                 topics_response = supabase.table('topics')\
                     .select('topic_id, topic_name')\
-                    .in_('topic_id', topic_ids)\
+                    .in_('topic_id', all_topic_ids)\
                     .execute()
+                
                 for topic in topics_response.data:
                     topic_name_to_id[topic['topic_name']] = topic['topic_id']
 
@@ -110,34 +115,20 @@ def get_course_generation_data(user_id: str, course_id: str) -> Optional[CourseG
 @custom_logger.log_function_call
 def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDetailedData]:
     """
-    Get detailed course data including all chapters, topics, and course metadata.
+    Get detailed course data including chapters and topics.
     
     Args:
         user_id (str): The ID of the user
         course_id (str): The ID of the course
         
     Returns:
-        Optional[CourseDetailedData]: Detailed course data including chapters and topics,
-                                    or None if course not found or error occurs
-    
-    Example:
-        course_data = get_course_detailed_data(
-            "15eee4cb-ad17-4818-88d4-5de9f15b55a7",
-            "e26098b5-a504-4b13-88a5-02c0502886d5"
-        )
-        if course_data:
-            print(f"Course: {course_data['course_name']}")
-            print(f"Skill Level: {course_data['skill_level']}")
-            for chapter in course_data['chapters']:
-                print(f"\nChapter: {chapter['chapter_name']}")
-                for topic in chapter['topics']:
-                    print(f"  - Topic: {topic['topic_name']}")
+        Optional[CourseDetailedData]: Detailed course data or None if not found
     """
     try:
+        # No need for artificial delay
         # Initialize Supabase client
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time 
-        time.sleep(10)
+        
         # First, verify user has access to this course
         user_response = supabase.table('users')\
             .select('courses_json')\
@@ -163,41 +154,41 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
         course_data = course_response.data
         chapters_json = course_data.get('chapters_json', {}).get('chapters', [])
         
-        # Get all chapters data
-        chapters_data: List[ChapterData] = []
-        for chapter_id in chapters_json:
-            # Get chapter details
-            chapter_response = supabase.table('chapters')\
+        # Get all chapters data in a single query
+        if chapters_json:
+            chapters_response = supabase.table('chapters')\
                 .select('*')\
-                .eq('chapter_id', chapter_id)\
-                .single()\
+                .in_('chapter_id', chapters_json)\
                 .execute()
                 
-            if chapter_response.data:
-                chapter = chapter_response.data
+            chapters_data: List[ChapterData] = []
+            
+            # Process chapters data
+            for chapter in chapters_response.data:
                 topic_ids = chapter.get('topics_json', {}).get('topic_ids', [])
                 
-                # Get topics for this chapter
-                topics_response = supabase.table('topics')\
-                    .select('topic_id, topic_name')\
-                    .in_('topic_id', topic_ids)\
-                    .execute()
-                
-                topics_data = [
-                    {
-                        'topic_id': topic['topic_id'],
-                        'topic_name': topic['topic_name']
-                    }
-                    for topic in topics_response.data
-                ]
-                
-                chapters_data.append({
-                    'chapter_id': chapter['chapter_id'],
-                    'chapter_name': chapter['chapter_name'],
-                    'topics': topics_data,
-                    'created_at': chapter['created_at'],
-                    'tags': chapter.get('tags', {})
-                })
+                # Get topics for this chapter in a single query
+                if topic_ids:
+                    topics_response = supabase.table('topics')\
+                        .select('topic_id, topic_name')\
+                        .in_('topic_id', topic_ids)\
+                        .execute()
+                    
+                    topics_data = [
+                        {
+                            'topic_id': topic['topic_id'],
+                            'topic_name': topic['topic_name']
+                        }
+                        for topic in topics_response.data
+                    ]
+                    
+                    chapters_data.append({
+                        'chapter_id': chapter['chapter_id'],
+                        'chapter_name': chapter['chapter_name'],
+                        'topics': topics_data,
+                        'created_at': chapter['created_at'],
+                        'tags': chapter.get('tags', {})
+                    })
         
         # Construct the final response
         detailed_data: CourseDetailedData = {
@@ -214,7 +205,7 @@ def get_course_detailed_data(user_id: str, course_id: str) -> Optional[CourseDet
         return detailed_data
         
     except Exception as e:
-        logger.error(f"Error getting detailed course data: {str(e)}")
+        logger.error(f"Error getting course detailed data: {str(e)}")
         return None
 
 @custom_logger.log_function_call
@@ -230,9 +221,9 @@ def get_course_summary(user_id: str, course_id: str) -> Dict[str, Any]:
         Dict[str, Any]: Course summary data or empty dict if not found
     """
     try:
+        # No need for artificial delay
         supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
-        import time 
-        time.sleep(10)
+        
         # Get course data
         course_response = supabase.table('courses')\
             .select('course_name, skill_level, teaching_pattern, user_prompt, created_at')\
@@ -268,9 +259,8 @@ def get_course_articles(course_id: str) -> List[Dict[str, Any]]:
         List[Dict[str, Any]]: A list of articles for the given course
     """
     try:
-        supabase: Client = create_client("https://mouwhbulaoghvsxbvmwj.supabase.co", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1vdXdoYnVsYW9naHZzeGJ2bXdqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0NjI1NzQsImV4cCI6MjA1NjAzODU3NH0.52PcqiCjO8L1VU1lY7t01VLVSD_Cvz0OQFuPfT7lJ2w")
-        import time 
-        time.sleep(10)
+        # Initialize Supabase client using Config values
+        supabase: Client = create_client(Config.SUPABASE_URL, Config.SUPABASE_KEY)
         #articles doesn't have column for course_id it has metadata json with course_id so see in the metadata_json for article_id
         articles_response = supabase.table('articles')\
             .select('*')\
