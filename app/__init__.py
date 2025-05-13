@@ -9,7 +9,7 @@ import os
 from dotenv import load_dotenv
 import sys
 import logging
-from flask_caching import Cache
+# from flask_caching import Cache
 
 
 # Load environment variables
@@ -74,6 +74,10 @@ def create_app(config_name=None):
         from .controllers.recommendation_controller import recommendation_bp
         app.register_blueprint(recommendation_bp, url_prefix='/api')
         logging.info("Successfully registered recommendation blueprint")
+        
+        from .controllers.RSHome_controller import recommendationHome_bp
+        app.register_blueprint(recommendationHome_bp, url_prefix='/api')
+        logging.info("Successfully registered recommendationHome blueprint")
         
         # Add a simple health check route
         @app.route('/health', methods=['GET'])
