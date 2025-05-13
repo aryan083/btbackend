@@ -1067,11 +1067,12 @@ class RAGGenerationService:
         - Only <body> content allowed (no head/styles)
         - Semantic HTML5 elements required (article, section, etc.)
         - Tables must use proper <thead>/<tbody> structure
-        - Code samples require syntax highlighting hints and must have word wrapping to fit display
+        - Code samples require syntax highlighting hints and must have word wrapping to fit display plus for each new line it    should use "\\n" or </br> to go to next line
         - External links open in new tab
         - All sections must have ID attributes
         - No markdown - only pure HTML
         - Error handling examples in red bordered divs
+        - If there is no code in the context then dont use code tags in the output and don't generate any code in the output
 
         **Special Instructions:**
         {teaching_instructions}

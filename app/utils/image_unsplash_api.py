@@ -344,8 +344,9 @@ def generate_article_title(client, content: str) -> Optional[str]:
             raise ValueError("Article content is required")
             
         prompt = """Generate an engaging and SEO-friendly title for the following article content.
-        The title should be 8-12 words long and include relevant keywords.
+        The title should be around max 10 words long and include relevant keywords.
         Make it attention-grabbing while maintaining accuracy.
+        make the article title such that from outside no one can figure out what the article is about but it will relate very well to the article content once the user starts reading it, try to make it some what cool and less in length.
         Return ONLY the title text, nothing else.
         
         Article content:
