@@ -24,18 +24,16 @@ def recommendation():
 
 
     try:
-
+        top_k = 5
         user_id = request.form.get("user_id")
         article_id = request.form.get("article_id")
-
 
         supabase = Recommendation.supabase_init()
 
         response = Recommendation.get_articles(supabase,user_id)
-
         formatted_response = Recommendation.format_articles(response)
         print(f"{formatted_response}")
-        top_responses = Recommendation.recommendation_algorithm(formatted_response, article_id)
+        top_responses = Recommendation.recommendation_algorithm(formatted_response, article_id, top_k)
 
         return jsonify({
             'message': 'TOP IDs Fetched successfully',

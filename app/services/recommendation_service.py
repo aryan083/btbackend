@@ -18,7 +18,7 @@ class Recommendation:
         supabase = create_client(supabase_url, supabase_key)
         return supabase
 
-    def recommendation_algorithm( data: pd.DataFrame, article_id: str) -> list:
+    def recommendation_algorithm( data: pd.DataFrame, article_id: str, top_k : int) -> list:
         recommendation_list = ['494acb63-f7cd-4c1c-8dfa-6cafb86e92c6','8aec54a4-8f08-4066-912b-700e4b68774f','b74591cd-d5e4-43d5-8122-67c0688f5f3d']
         print(article_id)
         return recommendation_list
