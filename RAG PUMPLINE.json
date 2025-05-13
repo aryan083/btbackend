@@ -1,0 +1,233 @@
+{
+  "info": {
+    "name": "RAG Pipeline API",
+    "description": "Testing collection for RAG Pipeline",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "1. Upload and Process PDF",
+      "item": [
+        {
+          "name": "Upload PDF with Course Info",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/your/test.pdf",
+                  "description": "PDF file to process"
+                },
+                {
+                  "key": "course_id",
+                  "value": "{{course_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "user_id",
+                  "value": "{{user_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "document_type",
+                  "value": "book",
+                  "type": "text"
+                },
+                {
+                  "key": "document_name",
+                  "value": "test_document",
+                  "type": "text"
+                },
+                {
+                  "key": "extract_images",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "extract_text",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "save_json",
+                  "value": "true",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/rag_generation/upload_and_process",
+              "host": ["{{base_url}}"],
+              "path": ["rag_generation", "upload_and_process"]
+            },
+            "description": "Upload and process a PDF file with course information"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Process Content",
+      "item": [
+        {
+          "name": "Process Course Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"base_path\": \"{{document_dir}}\",\n    \"course_id\": \"{{course_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rag_generation/process",
+              "host": ["{{base_url}}"],
+              "path": ["rag_generation", "process"]
+            },
+            "description": "Process course content for RAG generation"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Generate Content",
+      "item": [
+        {
+          "name": "Generate HTML Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"document_dir\": \"{{document_dir}}\",\n    \"course_id\": \"{{course_id}}\",\n    \"user_id\": \"{{user_id}}\",\n    \"match_threshold\": 0.7,\n    \"max_results\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rag_generation/generate",
+              "host": ["{{base_url}}"],
+              "path": ["rag_generation", "generate"]
+            },
+            "description": "Generate HTML content using RAG"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Complete Pipeline Test",
+      "item": [
+        {
+          "name": "Full Pipeline Test",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Test successful response",
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "// Test response structure",
+                  "pm.test(\"Response has required fields\", function () {",
+                  "    const response = pm.response.json();",
+                  "    pm.expect(response).to.have.property('status');",
+                  "    pm.expect(response).to.have.property('document_dir');",
+                  "    pm.expect(response).to.have.property('topic_ids');",
+                  "    pm.expect(response).to.have.property('process_result');",
+                  "    pm.expect(response).to.have.property('generated_result');",
+                  "});",
+                  "",
+                  "// Save variables for subsequent requests",
+                  "const response = pm.response.json();",
+                  "if (response.document_dir) {",
+                  "    pm.environment.set(\"document_dir\", response.document_dir);",
+                  "}",
+                  ""
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/your/test.pdf"
+                },
+                {
+                  "key": "course_id",
+                  "value": "{{course_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "user_id",
+                  "value": "{{user_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "document_type",
+                  "value": "book",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/rag_generation/upload_and_process",
+              "host": ["{{base_url}}"],
+              "path": ["rag_generation", "upload_and_process"]
+            },
+            "description": "Test the complete pipeline in one go"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// You can add pre-request scripts here",
+          "// For example, setting up authentication tokens"
+        ]
+      }
+    },
+    {
+      "listen": "test",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Global test scripts can go here"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    }
+  ]
+}

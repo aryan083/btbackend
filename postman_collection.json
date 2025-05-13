@@ -1,77 +1,355 @@
 {
-	"info": {
-		"_postman_id": "pdf-processor-collection",
-		"name": "PDF Processor API",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "Upload PDF",
-			"request": {
-				"method": "POST",
-				"header": [],
-				"body": {
-					"mode": "formdata",
-					"formdata": [
-						{
-							"key": "file",
-							"type": "file",
-							"src": []
-						},
-						{
-							"key": "book_name",
-							"value": "Sample Book",
-							"type": "text"
-						}
-					]
-				},
-				"url": {
-					"raw": "{{base_url}}/api/upload",
-					"host": ["{{base_url}}"],
-					"path": ["api", "upload"]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Process PDF",
-			"request": {
-				"method": "POST",
-				"header": [
-					{
-						"key": "Content-Type",
-						"value": "application/json"
-					}
-				],
-				"body": {
-					"mode": "raw",
-					"raw": "{\n    \"file_path\": \"/path/to/uploaded/pdf\",\n    \"extract_images\": true,\n    \"extract_text\": true,\n    \"save_json\": true\n}"
-				},
-				"url": {
-					"raw": "{{base_url}}/api/process",
-					"host": ["{{base_url}}"],
-					"path": ["api", "process"]
-				}
-			},
-			"response": []
-		},
-		{
-			"name": "Health Check",
-			"request": {
-				"method": "GET",
-				"url": {
-					"raw": "{{base_url}}/health",
-					"host": ["{{base_url}}"],
-					"path": ["health"]
-				}
-			},
-			"response": []
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:5000"
-		}
-	]
-}
+  "info": {
+    "_postman_id": "pdf-processor-collection",
+    "name": "PDF Processor API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Document Processing",
+      "item": [
+        {
+          "name": "Upload PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "book_name",
+                  "value": "Sample Book",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/upload",
+              "host": ["{{base_url}}"],
+              "path": ["api", "upload"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Upload and Process PDF",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "document_type",
+                  "value": "book",
+                  "type": "text",
+                  "description": "Either 'book' or 'syllabus'"
+                },
+                {
+                  "key": "document_name",
+                  "value": "",
+                  "type": "text",
+                  "description": "Optional document name"
+                },
+                {
+                  "key": "extract_images",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "extract_text",
+                  "value": "true",
+                  "type": "text"
+                },
+                {
+                  "key": "save_json",
+                  "value": "true",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/upload_and_process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "upload_and_process"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process Book",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "document_name",
+                  "value": "",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_book",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_book"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process Syllabus",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "document_name",
+                  "value": "",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_syllabus",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_syllabus"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process PDF",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"file_path\": \"/path/to/uploaded/pdf\",\n    \"extract_images\": true,\n    \"extract_text\": true,\n    \"save_json\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Process Course JSON",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"file_path\": \"/path/to/course.json\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/process_course_json",
+              "host": ["{{base_url}}"],
+              "path": ["api", "process_course_json"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Serve File",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/uploads/{filename}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "uploads", "{filename}"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Parse Document",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{base_url}}/api/parse_document",
+              "host": ["{{base_url}}"],
+              "path": ["api", "parse_document"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Course Management",
+      "item": [
+        {
+          "name": "Create Course",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"course_name\": \"Sample Course\",\n    \"tags\": {},\n    \"metadata\": \"\",\n    \"chapters_json\": {},\n    \"skill_level\": 1,\n    \"teaching_pattern\": {},\n    \"user_prompt\": \"Sample prompt\",\n    \"progress\": 0.0\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/courses",
+              "host": ["{{base_url}}"],
+              "path": ["courses"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Send PDF to Gemini",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "course_pdf",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "book_pdf_name",
+                  "value": "sample.pdf",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/send_pdf_to_gemini",
+              "host": ["{{base_url}}"],
+              "path": ["send_pdf_to_gemini"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Directory Management",
+      "item": [
+        {
+          "name": "Create Directory",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"dir_path\": \"path/to/directory\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/create",
+              "host": ["{{base_url}}"],
+              "path": ["create"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "RAG Operations",
+      "item": [
+        {
+          "name": "Generate HTML Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"document_dir\": \"app/static/uploads/Forozon\",\n    \"course_id\": \"b8c30d7c-56c5-4439-a235-8a756471278f\",\n    \"output_dir\": \"output\",\n    \"match_threshold\": 0.7,\n    \"max_results\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag/generate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag", "generate"]
+            },
+            "description": "Generate HTML content for course materials using RAG"
+          },
+          "response": []
+        },
+        {
+          "name": "Process Course Content",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"base_path\": \"app/static/uploads/Forozon/Forozon\",\n    \"course_id\": \"b8c30d7c-56c5-4439-a235-8a756471278f\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/rag/process",
+              "host": ["{{base_url}}"],
+              "path": ["api", "rag", "process"]
+            },
+            "description": "Process course content (text and images) for RAG generation"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000"
+    }
+  ]
+} 

@@ -12,21 +12,17 @@ import io
 from unstructured.partition.pdf import partition_pdf
 from datetime import datetime
 from config import Config
-import re
+import re 
+from fuzzywuzzy import fuzz
+from run import custom_logger
 
 # Set up colored logging
-handler = colorlog.StreamHandler()
-handler.setFormatter(colorlog.ColoredFormatter(
-    Config.LOG_FORMAT,
-    log_colors=Config.LOG_COLORS
-))
-logger = colorlog.getLogger(__name__)
-logger.addHandler(handler)
-logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)    
 
 class PDFParser:
     """Enhanced PDF parser for text and image extraction"""
-
+    @custom_logger.log_function_call
     def __init__(self, pdf_path: str, output_base_dir: str):
         """
         Initialize the PDF parser
@@ -34,25 +30,46 @@ class PDFParser:
         @param output_base_dir: str - Base directory to store extracted content
         @returns: None
         @description: Creates directories for text and images, initializes PDF document
+        @raises: ValueError if pdf_path is invalid or not a PDF file
+                RuntimeError if PDF cannot be opened
         """
         self.pdf_path = Path(pdf_path)
+        
+        # Validate PDF file
+        if not self.pdf_path.exists():
+            raise ValueError(f"PDF file does not exist: {pdf_path}")
+        if self.pdf_path.suffix.lower() != '.pdf':
+            raise ValueError(f"File is not a PDF: {pdf_path}")
+            
         self.book_name = self.pdf_path.stem
-        self.output_dir = Path(output_base_dir) / self.book_name
+        self.output_dir = Path(output_base_dir)
         self.text_dir = self.output_dir / "Text"
         self.images_dir = self.output_dir / "Images"
-        
-        # Create directories
-        self.text_dir.mkdir(parents=True, exist_ok=True)
-        self.images_dir.mkdir(parents=True, exist_ok=True)
-        
+        self.course_json = None
+        self.chapter_map = {}
+        self.doc = None
+
         try:
+            # Create directories
+            self.text_dir.mkdir(parents=True, exist_ok=True)
+            self.images_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Open and validate PDF
             self.doc = fitz.open(pdf_path)
+            if not self.doc.is_pdf:
+                raise ValueError("Document is not a valid PDF")
+                
             self.metadata = self.doc.metadata
             logger.info(f"Opened PDF: {pdf_path}")
+            
         except Exception as e:
-            logger.error(f"Failed to open PDF: {str(e)}")
-            raise
+            # Clean up if initialization fails
+            if self.doc:
+                self.doc.close()
+            logger.error(f"Failed to initialize PDF parser: {str(e)}")
+            raise RuntimeError(f"Failed to open PDF: {str(e)}")
 
+    @custom_logger.log_function_call
     def _process_toc(self) -> List[Dict[str, Any]]:
         """
         Process table of contents into chapter structure
@@ -79,6 +96,7 @@ class PDFParser:
         
         return chapters
 
+    @custom_logger.log_function_call
     def _extract_metadata(self) -> Dict[str, Any]:
         """
         Extract metadata from PDF document
@@ -112,6 +130,7 @@ class PDFParser:
                 return None
         return None
 
+    @custom_logger.log_function_call
     def _extract_images(self) -> List[Dict[str, Any]]:
         """
         Extract images from PDF pages
@@ -119,7 +138,12 @@ class PDFParser:
         @description: Extracts images from each page and saves them with metadata
         """
         images = []
+        image_refs = set()  # Track unique image references
+        
         try:
+            if not self.doc:
+                raise ValueError("PDF document not properly initialized")
+                
             for page_num in range(len(self.doc)):
                 page = self.doc[page_num]
                 page_images = page.get_images()
@@ -130,17 +154,30 @@ class PDFParser:
                 for img_idx, img in enumerate(page_images):
                     try:
                         xref = img[0]
+                        # Skip if we've already processed this image
+                        if xref in image_refs:
+                            continue
+                            
+                        image_refs.add(xref)
                         base_image = self.doc.extract_image(xref)
                         
-                        if base_image:
-                            # Generate unique filename
-                            image_filename = f"page_{page_num + 1}_img_{img_idx + 1}.{base_image['ext']}"
-                            image_path = self.images_dir / image_filename
+                        if not base_image:
+                            logger.warning(f"Failed to extract image data for xref {xref} on page {page_num + 1}")
+                            continue
                             
-                            # Save image file
+                        # Generate unique filename
+                        image_filename = f"page_{page_num + 1}_img_{img_idx + 1}.{base_image['ext']}"
+                        image_path = self.images_dir / image_filename
+                        
+                        try:
+                            # Save image file with proper error handling
                             with open(image_path, "wb") as f:
                                 f.write(base_image["image"])
-                            
+                                
+                            # Validate saved image
+                            if not image_path.exists() or image_path.stat().st_size == 0:
+                                raise IOError("Failed to save image or empty file created")
+                                
                             # Store image metadata
                             image_info = {
                                 'path': str(image_path.relative_to(self.output_dir)),
@@ -157,6 +194,13 @@ class PDFParser:
                             images.append(image_info)
                             logger.info(f"Saved image: {image_path}")
                             
+                        except IOError as e:
+                            logger.error(f"Failed to save image {image_filename}: {str(e)}")
+                            # Clean up partially written file
+                            if image_path.exists():
+                                image_path.unlink()
+                            continue
+                            
                     except Exception as e:
                         logger.error(f"Failed to extract image {img_idx} from page {page_num + 1}: {str(e)}")
                         continue
@@ -167,6 +211,7 @@ class PDFParser:
             
         return images
 
+    @custom_logger.log_function_call
     def _extract_text_with_unstructured(self) -> List[Dict[str, Any]]:
         """
         Extract text from PDF pages using unstructured
@@ -206,6 +251,7 @@ class PDFParser:
             logger.error(f"Text extraction failed: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
     def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
                         text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
         """
@@ -297,6 +343,143 @@ class PDFParser:
             logger.error(f"Failed to save JSON files: {str(e)}")
             raise
 
+    @custom_logger.log_function_call
+    def _create_chapter_map(self):
+        """Map JSON chapters to PDF structure"""
+        try:
+            toc = self._get_processed_toc()
+            for json_chapter in self.course_json.get("Chapters", {}).keys():
+                best_match = max(toc, 
+                    key=lambda x: fuzz.token_sort_ratio(x['title'], json_chapter))
+                self.chapter_map[json_chapter] = {
+                    'start_page': best_match['start_page'],
+                    'end_page': best_match['end_page']
+                }
+        except Exception as e:
+            logger.error(f"Chapter mapping failed: {str(e)}")
+            raise
+
+ 
+    @custom_logger.log_function_call
+    def _save_json_files(self, metadata: Dict[str, Any], chapters: List[Dict[str, Any]], 
+                        text_elements: List[Dict[str, Any]], images: List[Dict[str, Any]]) -> Dict[str, str]:
+        """
+        Save extracted content to JSON files
+        @param metadata: Dict[str, Any] - Document metadata
+        @param chapters: List[Dict[str, Any]] - Chapter information
+        @param text_elements: List[Dict[str, Any]] - Extracted text elements
+        @param images: List[Dict[str, Any]] - Extracted image information
+        @returns: Dict[str, str] - Paths to saved JSON files
+        @description: Saves metadata, chapters, and content to structured JSON files
+        """
+        try:
+            # Save metadata and table of contents
+            index_data = {
+                'metadata': metadata,
+                'table_of_contents': [
+                    {
+                        'title': chapter['title'],
+                        'page_range': {
+                            'start': chapter['start_page'],
+                            'end': chapter['end_page']
+                        }
+                    }
+                    for chapter in chapters
+                ]
+            }
+            
+            index_path = self.text_dir / "index.json"
+            with open(index_path, 'w', encoding='utf-8') as f:
+                json.dump(index_data, f, indent=4, ensure_ascii=False)
+            
+            # Save chapter content
+            chapter_files = []
+            for idx, chapter in enumerate(chapters):
+                chapter_data = {
+                    'metadata': {
+                        'number': idx + 1,
+                        'title': chapter['title'],
+                        'page_range': {
+                            'start': chapter['start_page'],
+                            'end': chapter['end_page']
+                        }
+                    },
+                    'content': []
+                }
+                
+                # Add page content for this chapter
+                for page_num in range(chapter['start_page'], chapter['end_page'] + 1):
+                    page_content = {
+                        'page_number': page_num,
+                        'text': [],
+                        'images': []
+                    }
+                    
+                    # Add text elements for this page
+                    page_text = [elem for elem in text_elements 
+                               if elem['metadata']['page_number'] == page_num]
+                    page_content['text'] = page_text
+                    
+                    # Add images for this page
+                    page_images = [img for img in images if img['page_number'] == page_num]
+                    page_content['images'] = page_images
+                    
+                    chapter_data['content'].append(page_content)
+                
+                # Save chapter file
+                safe_title = re.sub(r'[^\w-]', '_', chapter['title']).lower()
+                chapter_path = self.text_dir / f"chapter_{idx+1}_{safe_title[:50]}.json"
+                with open(chapter_path, 'w', encoding='utf-8') as f:
+                    json.dump(chapter_data, f, indent=4, ensure_ascii=False)
+                chapter_files.append(str(chapter_path))
+            
+            # Save image metadata
+            if images:
+                image_meta_path = self.images_dir / "image_metadata.json"
+                with open(image_meta_path, 'w', encoding='utf-8') as f:
+                    json.dump({
+                        'total_images': len(images),
+                        'images': images
+                    }, f, indent=4, ensure_ascii=False)
+            
+            return {
+                'index': str(index_path),
+                'chapters': chapter_files,
+                'images_meta': str(image_meta_path) if images else None
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to save JSON files: {str(e)}")
+            raise
+        
+        # Add subtopic chunks if using JSON
+        if self.course_json:
+            chunks = self._chunk_by_subtopics(text_elements, images)
+            chunk_dir = self.text_dir / "subtopic_chunks"
+            chunk_dir.mkdir(exist_ok=True)
+            
+            chunk_files = []
+            for chunk in chunks:
+                safe_code = chunk['subtopic_code'].replace('.', '_')
+                chunk_path = chunk_dir / f"chunk_{safe_code}.json"
+                with open(chunk_path, 'w') as f:
+                    json.dump(chunk, f, indent=2)
+                chunk_files.append(str(chunk_path))
+            
+            result['subtopic_chunks'] = chunk_files
+        
+        return result
+
+  
+        
+    # def process_book(self) -> Dict[str, Any]:
+    #     """
+    #     Process a book PDF document
+    #     @returns: Dict[str, Any] - Document structure with metadata and content
+    #     @description: Processes the PDF as a book, extracting metadata, text, and images
+    #     """
+    #     return self.process_document(extract_images=True, extract_text=True, save_json=True)
+    @custom_logger.log_function_call
     def process_document(self, extract_images: bool = True, 
                          extract_text: bool = True, 
                          save_json: bool = True) -> Dict[str, Any]:
@@ -311,52 +494,57 @@ class PDFParser:
                      including metadata, chapters, and paths to extracted content.
         """
         try:
-            # Extract metadata
-            metadata = self._extract_metadata()
-            logger.info(f"Metadata extracted for {self.book_name}")
-
-            # Process table of contents
-            chapters = self._process_toc()
-            logger.info(f"Table of contents processed: {len(chapters)} chapters found")
-
-            # Initialize result structure
+            # Initialize result structure with default values
             result = {
                 'status': 'success',
-                'metadata': metadata,
-                'chapters': chapters,
+                'metadata': {},
+                'chapters': [],
                 'images': [],
-                'text_elements': []
+                'text_elements': [],
+                'chunks': [],
+                'course_json': False
             }
+            
+            # Extract core components
+            result['metadata'] = self._extract_metadata()
+            logger.info(f"Metadata extracted for {self.book_name}")
 
-            # Extract images if requested
-            if extract_images:
-                try:
-                    images = self._extract_images()
-                    result['images'] = images
-                    logger.info(f"Images extracted: {len(images)} images found")
-                except Exception as e:
-                    logger.error(f"Image extraction failed: {str(e)}")
-                    result['image_extraction_error'] = str(e)
-
-            # Extract text if requested
             if extract_text:
-                try:
-                    text_elements = self._extract_text_with_unstructured()
-                    result['text_elements'] = text_elements
-                    logger.info(f"Text extracted: {len(text_elements)} elements found")
-                except Exception as e:
-                    logger.error(f"Text extraction failed: {str(e)}")
-                    result['text_extraction_error'] = str(e)
+                result['text_elements'] = self._extract_text_with_unstructured()
+                logger.info(f"Text extracted: {len(result['text_elements'])} elements found")
 
-            # Save to JSON if requested
+            if extract_images:
+                result['images'] = self._extract_images()
+                logger.info(f"Images extracted: {len(result['images'])} images found")
+
+            # Process structure
+            result['chapters'] = self._process_toc()
+            logger.info(f"Table of contents processed: {len(result['chapters'])} chapters found")
+
+            # Handle course JSON chunking
+            if self.course_json:
+                try:
+                    result['chunks'] = self._chunk_by_subtopics(result['text_elements'], result['images'])
+                    result['course_json'] = True
+                    logger.info(f"Created {len(result['chunks'])} subtopic chunks")
+                except Exception as chunk_error:
+                    logger.error(f"Subtopic chunking failed: {str(chunk_error)}")
+                    result['chunking_error'] = str(chunk_error)
+
+            # Save files
             if save_json:
                 try:
-                    json_files = self._save_json_files(metadata, chapters, text_elements, result['images'])
+                    json_files = self._save_json_files(
+                        result['metadata'],
+                        result['chapters'],
+                        result['text_elements'],
+                        result['images']
+                    )
                     result['json_files'] = json_files
                     logger.info("JSON files saved successfully")
-                except Exception as e:
-                    logger.error(f"JSON saving failed: {str(e)}")
-                    result['json_save_error'] = str(e)
+                except Exception as save_error:
+                    logger.error(f"JSON saving failed: {str(save_error)}")
+                    result['json_save_error'] = str(save_error)
 
             return result
 
@@ -367,6 +555,7 @@ class PDFParser:
                 'message': f"Document processing failed: {str(e)}"
             }
 
+    @custom_logger.log_function_call
     def close(self):
         """
         Close the PDF document and clean up resources

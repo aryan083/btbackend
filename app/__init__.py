@@ -5,26 +5,15 @@ Sets up Flask app with all necessary configurations and extensions.
 from flask import Flask
 from flask_cors import CORS
 from pathlib import Path
-import logging
-from pythonjsonlogger import jsonlogger
 import os
 from dotenv import load_dotenv
+import sys
+import logging
+from flask_caching import Cache
+
 
 # Load environment variables
 load_dotenv()
-
-def setup_logging():
-    """
-    Set up JSON logging configuration
-    @returns: None
-    """
-    log_handler = logging.StreamHandler()
-    formatter = jsonlogger.JsonFormatter(
-        '%(asctime)s %(levelname)s %(name)s %(message)s'
-    )
-    log_handler.setFormatter(formatter)
-    logging.getLogger().addHandler(log_handler)
-    logging.getLogger().setLevel(logging.INFO)
 
 def create_app(config_name=None):
     """
@@ -37,9 +26,6 @@ def create_app(config_name=None):
     # Enable CORS
     CORS(app)
     
-    # Setup logging
-    setup_logging()
-    
     # Ensure upload directory exists
     upload_dir = Path(app.root_path) / 'static' / 'uploads'
     upload_dir.mkdir(parents=True, exist_ok=True)
@@ -48,14 +34,43 @@ def create_app(config_name=None):
     app.config['UPLOAD_FOLDER'] = str(upload_dir)
     app.config['MAX_CONTENT_LENGTH'] = 100 * 1024 * 1024  
     
+    # Configure watchdog to ignore PyTorch library files
+    if sys.platform == 'win32':
+        import watchdog.observers
+        from watchdog.observers import Observer
+        from watchdog.events import FileSystemEventHandler
+        
+        class IgnorePyTorchHandler(FileSystemEventHandler):
+            def on_modified(self, event):
+                if 'torch' in event.src_path:
+                    return
+                super().on_modified(event)
+        
+        observer = Observer()
+        observer.schedule(IgnorePyTorchHandler(), path=sys.prefix, recursive=True)
+        observer.start()
+    
     # Register blueprints with error handling
     try:
         from .controllers.rag_controller import rag_bp
         app.register_blueprint(rag_bp, url_prefix='/api')
+        logging.info("Successfully registered RAG blueprint")
         
-        from app.controllers.course_controller import course_bp
-        app.register_blueprint(course_bp)
+        from .controllers.course_controller import course_bp
+        app.register_blueprint(course_bp, url_prefix='/api')
         logging.info("Successfully registered course blueprint")
+        
+        from .controllers.directory_controller import directory_bp
+        app.register_blueprint(directory_bp, url_prefix='/api')
+        logging.info("Successfully registered directory blueprint")
+        
+        from .controllers.rag_generation_controller import rag_generation_bp
+        app.register_blueprint(rag_generation_bp, url_prefix='/api')
+        logging.info("Successfully registered rag generation blueprint")
+        
+        from .controllers.recommendation_controller import recommendation_bp
+        app.register_blueprint(recommendation_bp, url_prefix='/api')
+        logging.info("Successfully registered recommendation blueprint")
         
         # Add a simple health check route
         @app.route('/health', methods=['GET'])
