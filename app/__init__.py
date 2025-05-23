@@ -79,6 +79,10 @@ def create_app(config_name=None):
         app.register_blueprint(recommendationHome_bp, url_prefix='/api')
         logging.info("Successfully registered recommendationHome blueprint")
         
+        from .controllers.qa_controller import qa_bp
+        app.register_blueprint(qa_bp, url_prefix='/api')
+        logging.info("Successfully registered question-answer blueprint")
+        
         # Add a simple health check route
         @app.route('/health', methods=['GET'])
         def health_check():
